@@ -1,6 +1,6 @@
 ---
 name: big-gulps-huh
-description: Full zero-to-hero Claude Code collaboration setup — git protection, AI hooks, portable skills, CLAUDE.md skeleton, and a guide that actually explains things. For someone joining the project with nothing.
+description: Full zero-to-hero Claude Code collaboration setup — git protection, AI hooks, portable skills, CLAUDE.md skeleton, and a guide that actually explains things.
 argument: "[path|new <name>|guide|tutorial|guide --tone <preset>]"
 model-hint: opus
 ---
@@ -15,284 +15,135 @@ model-hint: opus
 | `<path>` | Scaffold into specified project path |
 | `new <name>` | Create new dir + `git init` + scaffold |
 | `guide` | Just regenerate the Big Gulps Guide |
-| `tutorial` | Scaffold WITH step-by-step teaching — pauses between layers to explain what each thing does and why |
+| `tutorial` | Scaffold with step-by-step teaching pauses between layers |
 | `guide --tone pro` | Regenerate guide in professional tone |
 | `guide --tone minimal` | Regenerate guide in minimal bullet-point tone |
 
-## Step 1: Detect Context
+## Step 1: Detect Context & Idempotency
 
-```
-- Is this a git repo? (`git rev-parse --git-dir`)
-- Does CLAUDE.md already exist?
-- Does `.claude/commands/` already have skills?
-- Does `.claude/settings.local.json` already exist?
+```bash
+git rev-parse --git-dir 2>/dev/null  # Is this a git repo?
 ```
 
-If `new <name>` argument: create directory, `cd` into it, `git init`.
-If `<path>` argument: verify it exists and `cd` into it.
-If `guide` argument: skip to Step 8 (Big Gulps Guide generation only).
-If `guide --tone pro` or `guide --tone minimal`: skip to Step 8 with tone preset.
-If `tutorial` argument: set `$TUTORIAL_MODE=true` — same scaffold flow but with teaching pauses between each layer (see Tutorial Mode section below).
+Scan for existing scaffold files and report status:
 
-If CLAUDE.md or settings.local.json already exist, use AskUserQuestion to confirm overwrite.
+| Layer | Files to check |
+|-------|---------------|
+| Git protection | `.git/hooks/pre-push`, `pre-commit`, `commit-msg`, `.gitattributes`, `scripts/setup-hooks.sh` |
+| Claude Code hooks | `.claude/settings.local.json` |
+| Check scripts | `scripts/check-console-log.sh`, `check-as-any.sh`, `check-async-safety.sh`, `check-file-size.sh` |
+| Skills | `.claude/commands/health.md` (+ 8 others) |
+| CLAUDE.md | `CLAUDE.md` |
+| Guide | `docs/BIG_GULPS_GUIDE.md` |
+
+Print a scan summary:
+
+```
+Scaffold scan:
+  Git protection:  [✅ present | ❌ missing]
+  Claude hooks:    [✅ present | ❌ missing]
+  Check scripts:   [N/4 present]
+  Skills:          [N/9 present]
+  CLAUDE.md:       [✅ present | ❌ missing]
+  Guide:           [✅ present | ❌ missing]
+```
+
+**Skip layers that are fully present.** For partially present layers, use AskUserQuestion: "Some [layer] files exist. Overwrite all, skip existing, or choose per file?"
+
+If `new <name>`: create directory, `cd`, `git init`, scaffold everything.
+If `guide` or `guide --tone <preset>`: skip to Step 8.
+If `tutorial`: set `$TUTORIAL_MODE=true` — same flow with teaching pauses (see Tutorial Mode below).
 
 ## Step 2: Ask Stack Questions
 
 Use AskUserQuestion to gather project context:
 
-**Question 1 — Language:**
+**Q1 — Language:**
 - TypeScript (Recommended)
 - Python
 - Go
 - Rust
 - Other
 
-**Question 2 — Test runner:**
-- Jest (Recommended for TS)
-- Vitest
-- Pytest
-- Go test
-- Cargo test
-- Other
+**Q2 — Test runner:**
+- Jest (Recommended for TS) / Vitest / Pytest / Go test / Cargo test / Other
 
-**Question 3 — Linter/type checker:**
-- tsc + ESLint (Recommended for TS)
-- Pyright + Ruff
-- golangci-lint
-- Clippy
-- Other
+**Q3 — Linter/type checker:**
+- tsc + ESLint (Recommended for TS) / Pyright + Ruff / golangci-lint / Clippy / Other
 
-**Question 4 — Package manager:**
-- npm (Recommended)
-- bun
-- yarn
-- pnpm
-- pip/uv
-- cargo
-- go modules
-- Other
+**Q4 — Package manager:**
+- npm (Recommended) / bun / yarn / pnpm / pip / uv / cargo / go modules / Other
 
-Store answers as `$LANG`, `$TEST_CMD`, `$LINT_CMD`, `$PKG_MGR`.
+**Q5 — Guide tone:**
+- Sarcastic (Recommended) — dry humor, "because someone did this" explanations
+- Professional — same content, straight delivery, corporate-safe
+- Minimal — just the facts, bullet points only
 
-**Question 5 — Guide tone:**
-- Sarcastic (Recommended) — dry humor, roasts, "because someone did this" explanations
-- Professional — same content, straight delivery, no jokes, corporate-safe
-- Minimal — just the facts, bullet points only, no prose
+Store as `$LANG`, `$TEST_CMD`, `$LINT_CMD`, `$PKG_MGR`, `$TONE`.
 
-Store as `$TONE`. Default to Sarcastic if user skips.
+Derive extensions and exclusions:
 
-Derive file extensions from language:
-- TypeScript → `*.ts|*.tsx`
-- Python → `*.py`
-- Go → `*.go`
-- Rust → `*.rs`
+| Language | `$EXT` | Test exclusions |
+|----------|--------|----------------|
+| TypeScript | `*.ts\|*.tsx` | `__tests__/`, `__mocks__/`, `*.test.*`, `*.spec.*` |
+| Python | `*.py` | `tests/`, `test_*`, `*_test.py` |
+| Go | `*.go` | `*_test.go` |
+| Rust | `*.rs` | `tests/`, `*_test.rs` |
 
-## Step 3: Git Protection (via `/git-shit`)
+## Step 3: Git Protection
 
-Run `/git-shit` to scaffold the full git protection layer. This is a standalone skill that handles all git hooks, .gitattributes, PR template, and setup script. See `git-shit.md` for full details.
+Delegate to `/git-shit`. Claude already has language, package manager, and branch answers from Step 2 — use those instead of re-asking.
 
-If `/git-shit` is not available (e.g., running outside this repo), fall back to creating all 3 hooks + setup script + .gitattributes inline. Use `chmod +x` on hooks after writing.
+If `/git-shit` is not available (running outside a repo that has it), write the 3 hooks + .gitattributes + setup-hooks.sh + .gitignore manually. The exact hook content is specified in the `git-shit.md` skill file — follow its Steps 3-6.
 
-### `.git/hooks/pre-push`
-
-```bash
-#!/bin/bash
-# Pre-push hook: Require PRs for main
-# Blocks direct pushes to main — forces PR workflow
-# Bypass: git push --no-verify (emergencies only)
-
-BRANCH=$(git branch --show-current)
-REMOTE="$1"
-
-while read local_ref local_sha remote_ref remote_sha; do
-  if [ "$remote_ref" = "refs/heads/main" ] && [ "$BRANCH" = "main" ]; then
-    if echo "$local_ref" | grep -q "refs/tags/"; then
-      continue
-    fi
-
-    echo ""
-    echo "🛑 Direct push to main blocked"
-    echo ""
-    echo "  Use the PR workflow instead:"
-    echo "    1. git checkout -b feature/my-change"
-    echo "    2. git push -u origin feature/my-change"
-    echo "    3. gh pr create --fill"
-    echo "    4. gh pr merge --squash --delete-branch"
-    echo ""
-    echo "  Emergency bypass: git push --no-verify"
-    echo ""
-    exit 1
-  fi
-done
-
-exit 0
-```
-
-### `.git/hooks/pre-commit`
-
-```bash
-#!/bin/bash
-# Pre-commit hook: Commit size warning
-# Non-blocking warning when staged changes exceed threshold
-
-WARN_THRESHOLD=200
-
-INSERTIONS=$(git diff --cached --numstat | awk '{sum+=$1} END{print sum+0}')
-
-if [ "$INSERTIONS" -gt "$WARN_THRESHOLD" ]; then
-  echo ""
-  echo "⚠️  Commit size warning: $INSERTIONS insertions (threshold: $WARN_THRESHOLD)"
-  echo ""
-  echo "  Staged files:"
-  git diff --cached --stat | tail -1
-  echo ""
-  echo "  Consider splitting into smaller atomic commits."
-  echo "  Ask: 'Is this truly ONE logical change?'"
-  echo ""
-fi
-
-exit 0
-```
-
-### `.git/hooks/commit-msg`
-
-```bash
-#!/bin/bash
-# Commit-msg hook: Enforce conventional commit prefixes
-# Valid: feat: fix: refactor: docs: test: chore: style: perf: ci: build: revert:
-# Scopes optional: feat(auth): fix(api):
-
-MSG_FILE="$1"
-MSG=$(head -1 "$MSG_FILE")
-
-# Allow merge commits
-if echo "$MSG" | grep -qE '^Merge '; then
-  exit 0
-fi
-
-# Allow squash merge commits from GitHub
-if echo "$MSG" | grep -qE '^\S+.*\(#[0-9]+\)$'; then
-  exit 0
-fi
-
-# Allow fixup/squash commits
-if echo "$MSG" | grep -qE '^(fixup|squash)! '; then
-  exit 0
-fi
-
-# Check for conventional commit prefix
-if echo "$MSG" | grep -qE '^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert)(\([a-zA-Z0-9_-]+\))?!?: .+'; then
-  exit 0
-fi
-
-echo ""
-echo "🛑 Commit message rejected — missing conventional prefix"
-echo ""
-echo "  Your message:  $MSG"
-echo ""
-echo "  Required format: <type>(<scope>): <description>"
-echo ""
-echo "  Types: feat fix refactor docs test chore style perf ci build revert"
-echo "  Scope: optional — e.g., feat(auth): or fix(api):"
-echo ""
-echo "  Examples:"
-echo "    feat: add user authentication flow"
-echo "    fix(api): prevent crash on empty response"
-echo "    docs: update contributing guide"
-echo ""
-exit 1
-```
-
-### `scripts/setup-hooks.sh`
-
-```bash
-#!/bin/bash
-# One-command hook installer for new cloners
-# Run: bash scripts/setup-hooks.sh
-
-HOOK_DIR=".git/hooks"
-
-if [ ! -d ".git" ]; then
-  echo "❌ Not a git repository. Run from project root."
-  exit 1
-fi
-
-for hook in pre-push pre-commit commit-msg; do
-  if [ -f "$HOOK_DIR/$hook" ]; then
-    echo "✅ $hook already installed"
-  else
-    echo "❌ $hook missing — check your .git/hooks/ directory"
-  fi
-done
-
-chmod +x "$HOOK_DIR"/pre-push "$HOOK_DIR"/pre-commit "$HOOK_DIR"/commit-msg 2>/dev/null
-echo ""
-echo "Done. All hooks are executable."
-```
-
-### `.gitattributes`
-
-```
-# Images — binary, no text diffs
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.gif binary
-*.webp binary
-*.ico binary
-*.svg text
-
-# Fonts — always binary
-*.ttf binary
-*.otf binary
-*.woff binary
-*.woff2 binary
-
-# Lock files — don't manually merge
-package-lock.json -diff merge=ours
-yarn.lock -diff merge=ours
-bun.lockb binary
-Cargo.lock -diff merge=ours
-
-# Auto-normalize line endings
-* text=auto
-```
-
-After writing all hooks, run: `chmod +x .git/hooks/pre-push .git/hooks/pre-commit .git/hooks/commit-msg`
+After this step, `.git/hooks/pre-push`, `pre-commit`, `commit-msg`, `.gitattributes`, `scripts/setup-hooks.sh`, and `.gitignore` should all exist.
 
 ## Step 4: Scaffold Claude Code Hooks
 
-Write `.claude/settings.local.json` with hooks wired to the check scripts from Step 5.
+Write `.claude/settings.local.json` with permissions and hooks.
 
-Adapt the file extension patterns and project root check based on `$LANG`:
-- TypeScript: `*.ts|*.tsx`, skip `__tests__/`, `__mocks__/`
-- Python: `*.py`, skip `tests/`, `__pycache__/`
-- Go: `*.go`, skip `*_test.go`
-- Rust: `*.rs`, skip `tests/`
+### Permissions by language
 
-The settings.local.json structure:
+All languages get these base permissions:
+
+```
+WebSearch, Bash(git:*), Bash(gh:*), Bash(ls:*), Bash(find:*), Bash(grep:*),
+Bash(cat:*), Bash(head:*), Bash(wc:*), Bash(chmod:*), Bash(bash:*),
+Bash(echo:*), Bash(mv:*), Bash(tree:*)
+```
+
+Add language-specific entries:
+
+| Language | Additional permissions |
+|----------|----------------------|
+| TypeScript | `Bash(node:*)`, `Bash(npx:*)`, `Bash(tsc:*)`, `Bash($PKG_MGR:*)` |
+| Python | `Bash(python3:*)`, `Bash(pip:*)`, `Bash(pytest:*)`, `Bash(pyright:*)`, `Bash(ruff:*)` |
+| Go | `Bash(go:*)`, `Bash(golangci-lint:*)` |
+| Rust | `Bash(cargo:*)`, `Bash(rustc:*)` |
+
+### Hook wiring
+
+Which check scripts to wire per language:
+
+| Language | Console | Type safety | Async | File size |
+|----------|---------|-------------|-------|-----------|
+| TypeScript | `check-console-log.sh` | `check-as-any.sh` | `check-async-safety.sh` | `check-file-size.sh` |
+| Python | `check-print-stmt.sh` | `check-type-ignore.sh` | *(skip)* | `check-file-size.sh` |
+| Go | `check-fmt-print.sh` | *(skip)* | *(skip)* | `check-file-size.sh` |
+| Rust | *(skip — clippy)* | *(skip)* | *(skip)* | `check-file-size.sh` |
+
+### settings.local.json template
 
 ```json
 {
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(git:*)",
-      "Bash(gh:*)",
-      "Bash($PKG_MGR:*)",
-      "Bash(node:*)",
-      "Bash(npx:*)",
-      "Bash(ls:*)",
-      "Bash(find:*)",
-      "Bash(grep:*)",
-      "Bash(cat:*)",
-      "Bash(head:*)",
-      "Bash(wc:*)",
-      "Bash(chmod:*)",
-      "Bash(bash:*)",
-      "Bash(echo:*)",
-      "Bash(mv:*)",
-      "Bash(tree:*)"
+      "Bash(git:*)", "Bash(gh:*)", "Bash(ls:*)", "Bash(find:*)",
+      "Bash(grep:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(wc:*)",
+      "Bash(chmod:*)", "Bash(bash:*)", "Bash(echo:*)", "Bash(mv:*)",
+      "Bash(tree:*)",
+      "$LANG_SPECIFIC_PERMISSIONS"
     ]
   },
   "hooks": {
@@ -300,26 +151,10 @@ The settings.local.json structure:
       {
         "matcher": "Edit|Write",
         "hooks": [
-          {
-            "type": "command",
-            "command": "bash scripts/check-console-log.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash scripts/check-as-any.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash scripts/check-async-safety.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash scripts/check-file-size.sh",
-            "timeout": 5
-          }
+          { "type": "command", "command": "bash scripts/$CONSOLE_SCRIPT", "timeout": 5 },
+          { "type": "command", "command": "bash scripts/$TYPE_SAFETY_SCRIPT", "timeout": 5 },
+          { "type": "command", "command": "bash scripts/$ASYNC_SCRIPT", "timeout": 5 },
+          { "type": "command", "command": "bash scripts/check-file-size.sh", "timeout": 5 }
         ]
       }
     ],
@@ -329,7 +164,7 @@ The settings.local.json structure:
         "hooks": [
           {
             "type": "command",
-            "command": "FILE_PATH=$(echo \"$TOOL_INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('file_path',''))\" 2>/dev/null); case \"$FILE_PATH\" in */.env|*/.env.*) echo 'BLOCKED: .env files are immutable. Edit .env manually to prevent accidental credential exposure.' >&2; exit 2;; *) exit 0;; esac",
+            "command": "FILE_PATH=$(echo \"$TOOL_INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('file_path',''))\" 2>/dev/null); case \"$FILE_PATH\" in */.env|*/.env.*) echo 'BLOCKED: .env files are immutable. Edit manually.' >&2; exit 2;; *) exit 0;; esac",
             "timeout": 5
           }
         ]
@@ -341,7 +176,7 @@ The settings.local.json structure:
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"Branch: $(git branch --show-current 2>/dev/null || echo 'N/A')\" && echo \"Uncommitted: $(git status --porcelain 2>/dev/null | wc -l | tr -d ' ') files\" && echo \"Tip: Run /health for full project status\"",
+            "command": "echo \"Branch: $(git branch --show-current 2>/dev/null || echo 'N/A')\" && echo \"Uncommitted: $(git status --porcelain 2>/dev/null | wc -l | tr -d ' ') files\" && echo \"Tip: Run /health for project status\"",
             "timeout": 5
           }
         ]
@@ -351,168 +186,267 @@ The settings.local.json structure:
 }
 ```
 
-**Language-specific adjustments:**
-- For Python: replace `check-as-any.sh` with `check-type-ignore.sh` (same pattern but greps for `# type: ignore`)
-- For Go: omit `check-as-any.sh` (no equivalent), keep console/async/size
-- For Rust: omit `check-as-any.sh`, omit `check-console-log.sh` (Rust uses `println!` which clippy handles)
-- Add language-specific permission entries (e.g., `Bash(python3:*)`, `Bash(go:*)`, `Bash(cargo:*)`)
+**Omit hook entries for scripts that don't apply to the chosen language** (see table above). Replace `$CONSOLE_SCRIPT`, `$TYPE_SAFETY_SCRIPT`, `$ASYNC_SCRIPT` with actual filenames, and `$LANG_SPECIFIC_PERMISSIONS` with the actual permission strings.
 
 ## Step 5: Scaffold Check Scripts
 
-Write 4 portable check scripts to `scripts/`. Each uses the same stdin JSON pattern.
+Write to `scripts/`. All scripts share the stdin JSON pattern for reading the edited file path from Claude Code hooks.
 
-**IMPORTANT:** Replace the project root check (`*/pahu-hau/*`) with a generic check. Use the project's directory name dynamically. For the generalized version, remove the project root filter entirely — the file extension and test exclusion filters are sufficient.
-
-### `scripts/check-console-log.sh`
-
-Adapt from the template in Step 4 notes. For each language:
-- **TypeScript:** grep for `console.(log|warn|error|info|debug|trace)(`
-- **Python:** grep for `print(` (excluding test files)
-- **Go:** grep for `fmt.Print` (excluding test files)
-- **Rust:** grep for `println!` or `dbg!`
-
-Core pattern for all:
+### `check-console-log.sh` (TypeScript version)
 
 ```bash
 #!/bin/bash
-# Hook: Console/Print Statement Sentinel
-# Warns on debug print statements in production code (non-blocking)
+# Console Statement Sentinel — warns on debug prints (non-blocking)
 
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
-
 [ -z "$FILE_PATH" ] && exit 0
 
-# --- LANGUAGE FILTER (adapt per $LANG) ---
-case "$FILE_PATH" in
-  $EXT_PATTERN) ;;
-  *) exit 0 ;;
-esac
+case "$FILE_PATH" in *.ts|*.tsx) ;; *) exit 0 ;; esac
+case "$FILE_PATH" in */__tests__/*|*/__mocks__/*|*.test.*|*.spec.*|*/jest.setup*|*/.claude/*|*/scripts/*) exit 0 ;; esac
 
-# --- SKIP TEST/CONFIG FILES ---
-case "$FILE_PATH" in
-  */__tests__/*|*/__mocks__/*|*.test.*|*.spec.*|*/jest.setup*|*/.claude/*|*/scripts/*) exit 0 ;;
-esac
-
-MATCHES=$(grep -nE '$CONSOLE_PATTERN' "$FILE_PATH" 2>/dev/null | grep -v "//.*console\." | head -5)
-
+MATCHES=$(grep -nE "console\.(log|warn|error|info|debug|trace)\(" "$FILE_PATH" 2>/dev/null | grep -v "//.*console\." | head -5)
 if [ -n "$MATCHES" ]; then
   echo ""
-  echo "--- Warning: Debug Print Statements ---"
+  echo "--- Warning: Console Statements ---"
   echo "File: $(basename "$FILE_PATH")"
-  echo ""
   echo "$MATCHES"
-  echo ""
-  echo "Remove debug statements before committing."
-  echo "----------------------------------------"
-  echo ""
+  echo "Remove before committing. Use a logger instead."
+  echo "-----------------------------------"
 fi
-
 exit 0
 ```
 
-### `scripts/check-as-any.sh`
+**Python variant** (`check-print-stmt.sh`): Same structure. Match `*.py`, skip `tests/`/`test_*`/`conftest*`. Grep for `\bprint\(` excluding lines with `# noqa`.
 
-TypeScript only. Greps for `\bas any\b`. Same stdin/filter pattern. Skip for Python/Go/Rust — instead:
-- **Python:** Write `check-type-ignore.sh` that greps for `# type: ignore`
-- **Go/Rust:** Skip this script entirely
+**Go variant** (`check-fmt-print.sh`): Same structure. Match `*.go`, skip `*_test.go`. Grep for `fmt\.Print`.
 
-### `scripts/check-async-safety.sh`
+### `check-as-any.sh` (TypeScript only)
 
-Generalized version — remove the Pahu Hau-specific function names from Check 1. Keep only:
-- **Check 1 (generic):** `AsyncStorage.(setItem|removeItem)` (for JS/TS projects). For Python: look for bare `asyncio.create_task(` without error handling.
-- **Check 2 (universal):** `.then(` chains without `.catch()` within 30 lines (JS/TS only)
-- For Go/Rust: skip this script (the compiler handles most of this)
+```bash
+#!/bin/bash
+# Type Assertion Sentinel — warns on `as any` (non-blocking)
 
-### `scripts/check-file-size.sh`
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
+[ -z "$FILE_PATH" ] && exit 0
 
-100% generic — copy as-is but remove the project root filter (`*/pahu-hau/*`). Works for all languages. Keep the 500-line threshold.
+case "$FILE_PATH" in *.ts|*.tsx) ;; *) exit 0 ;; esac
+case "$FILE_PATH" in */__tests__/*|*/__mocks__/*|*.test.*|*.spec.*|*/.claude/*|*/scripts/*) exit 0 ;; esac
+
+MATCHES=$(grep -nE '\bas any\b' "$FILE_PATH" 2>/dev/null | grep -v "//.*as any" | head -5)
+if [ -n "$MATCHES" ]; then
+  echo ""
+  echo "--- Warning: \`as any\` Type Assertion ---"
+  echo "File: $(basename "$FILE_PATH")"
+  echo "$MATCHES"
+  echo "Use proper types or \`unknown\` with type guards."
+  echo "------------------------------------------"
+fi
+exit 0
+```
+
+**Python variant** (`check-type-ignore.sh`): Same structure. Match `*.py`. Grep for `# type: ignore` (without specific error codes in brackets — bare ignores are the problem).
+
+**Go and Rust:** Skip this script entirely — their type systems don't have an equivalent escape hatch at this level.
+
+### `check-async-safety.sh` (TypeScript only)
+
+```bash
+#!/bin/bash
+# Async Promise Safety — warns on .then() without .catch() (non-blocking)
+
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
+[ -z "$FILE_PATH" ] && exit 0
+
+case "$FILE_PATH" in *.ts|*.tsx) ;; *) exit 0 ;; esac
+case "$FILE_PATH" in */__tests__/*|*/__mocks__/*|*.test.*|*.spec.*|*/.claude/*|*/scripts/*) exit 0 ;; esac
+
+THEN_LINES=$(grep -nE '\.then\(' "$FILE_PATH" 2>/dev/null | head -10)
+[ -z "$THEN_LINES" ] && exit 0
+
+WARNINGS=""
+while IFS= read -r line; do
+  LINE_NUM=$(echo "$line" | cut -d: -f1)
+  END=$((LINE_NUM + 30))
+  HAS_CATCH=$(sed -n "${LINE_NUM},${END}p" "$FILE_PATH" 2>/dev/null | grep -c '\.catch(')
+  if [ "$HAS_CATCH" -eq 0 ]; then
+    WARNINGS="${WARNINGS}${line}\n"
+  fi
+done <<< "$THEN_LINES"
+
+if [ -n "$WARNINGS" ]; then
+  echo ""
+  echo "--- Warning: Unguarded Async ---"
+  echo "File: $(basename "$FILE_PATH")"
+  echo -e "$WARNINGS" | head -5
+  echo "Add .catch() to .then() chains."
+  echo "--------------------------------"
+fi
+exit 0
+```
+
+**Python/Go/Rust:** Skip this script — their async models handle errors differently (Python has try/except, Go returns errors, Rust has Result).
+
+### `check-file-size.sh` (All languages)
+
+```bash
+#!/bin/bash
+# File Size Warning — warns on 500+ line files (non-blocking)
+
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null)
+[ -z "$FILE_PATH" ] && exit 0
+
+case "$FILE_PATH" in *.ts|*.tsx|*.js|*.jsx|*.py|*.go|*.rs) ;; *) exit 0 ;; esac
+case "$FILE_PATH" in */__tests__/*|*/__mocks__/*|*.test.*|*.spec.*|*/.claude/*|*/scripts/*) exit 0 ;; esac
+[ ! -f "$FILE_PATH" ] && exit 0
+
+LINES=$(wc -l < "$FILE_PATH" | tr -d ' ')
+if [ "$LINES" -gt 500 ]; then
+  echo ""
+  echo "--- File Size Warning ---"
+  echo "$(basename "$FILE_PATH"): $LINES lines (limit: 500)"
+  echo "Extract into smaller modules."
+  echo "-------------------------"
+fi
+exit 0
+```
+
+`chmod +x` all scripts after writing.
 
 ## Step 6: Scaffold 9 Portable Skills
 
-Write generalized versions of these skills to `.claude/commands/`. For each, strip all Pahu Hau-specific references and replace with generic equivalents or `$PROJECT`-style placeholders.
+Write each skill to `.claude/commands/` as a standalone markdown file with YAML frontmatter. Write the FULL skill content — each must be self-contained.
 
-### Skill 1: `future-feature.md`
+### 1. `health.md` — Project Health Dashboard
 
-**Keep:** Full 7-step pipeline (collect sources → extract → deduplicate → tier → backlog → build plan → report)
-**Generalize:**
-- Source paths: replace with `docs/reviews/`, `docs/episodes/`, `docs/reports/`
-- Feature tiers: keep Tier 1-4 system but remove Pahu Hau persona names
-- Output: `docs/future-features/FEATURE_BACKLOG.md` and `BUILD_PLAN.md`
-- Extraction: generic naming `review_[N].md`, `report_[N].md`
-- Remove: specific persona extraction rules, Pahu Hau file paths
+**Model hint:** haiku. Run 6 checks in parallel and produce a report card.
 
-### Skill 2: `ready-to-commit.md`
+**Checks:** (1) Type safety — run type checker, report error count. (2) Test suite — run tests, report pass/fail. (3) Dependency health — outdated + vulnerable deps. (4) TODO/FIXME/HACK scan — count by category across source dirs. (5) Large files — source files over 500 lines. (6) Source stats — file count + LOC by directory.
 
-**Keep:** File-count routing, category detection, preflight + retro chain
-**Generalize:**
-- Categories: COMPONENT, SERVICE, TYPE, TEST, CONFIG, OTHER (remove STORE, PARSER, RECIPE_SEED)
-- Paths: generic `src/**`, `lib/**`, `app/**`, `components/**`, `types/**`, `tests/**`
-- Skill chain: `/code-review` → `/preflight` → `/retro` (remove `/audit-sync`, `/guard-parser`)
-- Remove: `.claude/.audit-state.json` cache (too project-specific), specific test counts
+**Auto-detect commands** from project files: `package.json` → npm test, `pyproject.toml` → pytest, `go.mod` → go test, `Cargo.toml` → cargo test. Same for type checkers and dep audit tools.
 
-### Skill 3: `code-review.md`
+**Report format:** Each check gets ✅/❌/⚠️. Overall grade: A+ (all green) through F (can't run checks).
 
-**Keep:** Multi-agent routing (<=3 files single, >3 multi-agent), security checks, performance patterns
-**Generalize:**
-- Remove: theme token compliance, Zustand patterns, Firebase checks, tab bar dimensions
-- Keep: unused imports, dead code, error handling, type safety, accessibility, naming conventions
-- Add: generic "design system compliance" placeholder
+### 2. `preflight.md` — Pre-Push Gate
 
-### Skill 4: `deep-review.md`
+**Model hint:** haiku. 5 sequential checks, blocks on type/test failures.
 
-**Keep:** 5-agent parallel structure (Architecture, Security, Performance, Correctness, DX)
-**Generalize:**
-- Remove: theme tokens, Zustand patterns, Firebase scoping, tab bar height
-- Keep: parallel agent structure, severity ratings, fingerprinting
-- Replace domain checklists with generic equivalents
+1. Type check (BLOCKING — stop on errors)
+2. Test suite (BLOCKING — stop on failures)
+3. Debug statements (WARNING — language-appropriate grep patterns)
+4. Lint/style (WARNING — if linter config exists)
+5. Large files (WARNING — over 500 lines)
 
-### Skill 5: `preflight.md`
+**Verdict:** CLEAR TO PUSH ✅ or BLOCKED ❌ with details.
 
-**Keep:** 5-check structure (types, tests, hardcoded values, console.log, listener cleanup)
-**Generalize:**
-- Type check: `$LINT_CMD` instead of `npx tsc --noEmit`
-- Test: `$TEST_CMD` instead of `npm test`
-- Hardcoded values: generic "magic numbers / hardcoded strings" instead of COLORS/SPACING
-- Console.log: adapt pattern per language
-- Listener cleanup: generic "resource cleanup" instead of Firebase-specific
+### 3. `code-review.md` — Multi-Agent Code Review
 
-### Skill 6: `health.md`
+**Model hint:** sonnet. Routes by file count for efficiency.
 
-**Keep:** Types, tests, deps, TODOs, large files, summary report
-**Generalize:**
-- Commands: `$LINT_CMD`, `$TEST_CMD`, `$PKG_MGR outdated`, `$PKG_MGR audit`
-- Directories: `src/`, `lib/`, `app/`, `components/` (generic)
-- Remove: `npx expo-doctor`
-- Add: configurable directory list comment
+1. Count changed files vs last commit or vs main
+2. **1-3 files (Path A):** Single-pass review — correctness, security, performance, quality. Check: logic errors, null handling, input validation, injection vectors, hardcoded secrets, unused imports, naming, type safety, test coverage.
+3. **4+ files (Path B):** Spawn 3 parallel Sonnet agents — (Agent 1) Architecture + Security, (Agent 2) Correctness + Performance, (Agent 3) Quality + DX.
+4. Synthesize findings with severity ratings (critical/warning/info) and file:line references.
+5. **Verdict:** APPROVED / NEEDS CHANGES / BLOCKED.
 
-### Skill 7: `retro.md`
+### 4. `deep-review.md` — 5-Agent Deep Review
 
-**Keep:** 4-agent parallel structure (Lessons, Skills Auditor, CLAUDE.md Freshness, Workflow Efficiency)
-**Generalize:**
-- Replace `pahu-hau/` with project root
-- Remove: specific config paths, MEMORY.md 200-line limit reference
-- Keep: recent commits analysis, skill audit, CLAUDE.md drift detection, workflow metrics
+**Model hint:** sonnet. For significant changes, new features, or pre-release audits.
 
-### Skill 8: `learn.md`
+1. Collect changed files (main...HEAD)
+2. Spawn 5 parallel Sonnet agents:
+   - **Architecture:** Dependencies, module boundaries, API surface, patterns, file organization
+   - **Security:** Input validation, auth checks, secrets, injection, OWASP Top 10, data exposure
+   - **Performance:** Re-computation, caching, N+1 queries, unbounded iterations, memory leaks, bundle impact
+   - **Correctness:** Logic errors, null handling, error propagation, type safety, race conditions, state consistency
+   - **DX:** Readability, naming, documentation, test coverage, error messages, pattern consistency
+3. Synthesize, deduplicate, assign severity. Report with file:line references and verdict.
 
-**Keep:** Interactive tutor, predict-then-reveal, Socratic flow, mentor system, progress tracking
-**Generalize:**
-- Mentor names: keep the 3-mentor system but use generic names (The Professor, The Practitioner, The Philosopher) — let users customize
-- Course paths: `docs/courses/<topic>/`
-- Remove: Hawaiian references, specific project paths
-- Keep: COURSE.md + questions.json + progress.json structure
+### 5. `ready-to-commit.md` — Smart Commit Prep
 
-### Skill 9: `vibes.md`
+**Model hint:** sonnet. Categorizes changes, suggests message, chains review + preflight.
 
-**Copy directly** — 100% generic already. No changes needed.
+1. Detect changes: `git status --porcelain` + `git diff --cached --name-only`
+2. Categorize: COMPONENT, SERVICE, TYPE, TEST, CONFIG, DOCS, STYLE, OTHER — based on file path patterns
+3. Route by scope:
+   - **Small (1-5 files, 1 category):** Suggest conventional commit message, ask to confirm
+   - **Medium (6-15 files, 2-3 categories):** Run `/code-review` first, then suggest message
+   - **Large (16+ files or 4+ categories):** Warn about splitting, suggest how. If user insists, run `/deep-review`
+4. Run `/preflight` — if BLOCKED, stop
+5. Stage specific files (never `git add -A`), commit with agreed message
+6. Post-commit: show `git log --oneline -3`, offer to push, suggest `/retro`
 
-## Step 7: Generate CLAUDE.md Skeleton
+### 6. `retro.md` — Post-Session Retrospective
 
-Write a `CLAUDE.md` with pre-filled universal sections and TODO markers:
+**Model hint:** sonnet. 4-agent analysis of recent work.
+
+1. Gather context: `git log --oneline -20`, `git diff --stat HEAD~10`, CLAUDE.md, skill inventory, auto-memory
+2. Spawn 4 parallel agents:
+   - **Lessons Learned:** Patterns that worked [KEEP], caused friction [STOP], new gotchas [GOTCHA], techniques [TECHNIQUE]
+   - **Skills Auditor:** Skills used this session, stale paths, missing skills, description accuracy
+   - **CLAUDE.md Freshness:** Versions current? Structure matches reality? Missing gotchas?
+   - **Workflow Efficiency:** Permission gaps, automation opportunities, repeated manual steps
+3. Synthesize into retro report with prioritized action items
+4. Execute user-approved actions: update memory, CLAUDE.md, skills, settings
+
+### 7. `future-feature.md` — Feature Backlog Manager
+
+**Model hint:** sonnet. Extracts feature ideas from docs, deduplicates, prioritizes.
+
+1. Scan sources: `docs/reviews/`, `docs/reports/`, `docs/notes/`, GitHub issues (if gh available), existing backlog
+2. Extract features: title, description, source, category (UI/API/Perf/Security/DX/Infra/Content)
+3. Deduplicate: exact + near-duplicate detection
+4. Tier: T1 (Fix Existing), T2 (Enhance), T3 (New Feature), T4 (Implemented). Rank by impact × effort.
+5. Write `docs/future-features/FEATURE_BACKLOG.md` with tables per tier
+6. Optional: BUILD_PLAN.md grouping T1+T2 into sprints (3-5 features each)
+7. Print summary: sources scanned, features extracted, dedupes merged, top new ideas
+
+### 8. `learn.md` — Interactive Codebase Tutor
+
+**Model hint:** opus. Socratic method with predict-then-reveal.
+
+**3 mentor personalities:** The Professor (structured, fundamentals-first), The Practitioner (hands-on, example-driven), The Philosopher (Socratic, trade-off explorer). User picks at session start.
+
+**Teaching method:** (1) Show actual project code, (2) ask learner to predict behavior/purpose, (3) reveal answer, (4) connect to broader patterns, (5) pose "what if" variation.
+
+**Topic discovery:** Analyze project structure, recent git history, CLAUDE.md patterns. Suggest 5 topics ranked by relevance.
+
+**Session flow:** Setup → 3-5 exploration rounds (difficulty scales with answers) → hands-on challenge → wrap-up with takeaways.
+
+**Progress tracking:** `docs/courses/<topic>/progress.json` with sessions, concepts covered, accuracy, difficulty level.
+
+**Quiz mode:** 5 questions from covered topics using actual project code.
+
+### 9. `vibes.md` — Positive Mindset Priming
+
+**No model hint (uses default).** Research-backed ~5 minute launch sequence.
+
+This is the longest skill (~310 lines). Write the FULL content with all 10 steps:
+
+1. **Streak tracking** — persistent JSON at `~/.claude/vibes/streak.json`, milestones at 7/14/30/60/100 days
+2. **Breathing prompt** — 3 slow breaths (4-4-6 cadence), vagal tone activation
+3. **Category selection** — randomly pick 2-3 from: Inspiration, Humor, Discovery, Reframe, Brain Teaser, Flow Fuel, Focus. Bias by mood if argument provided (stressed → Reframe+Humor, low energy → Inspiration+Flow Fuel)
+4. **Web search** — fresh content per category, never canned quotes from training data
+5. **Interactive presentation** — one category at a time via AskUserQuestion. Brain teasers: ask first, reveal after answer. Humor: riff off their energy
+6. **What went well** — ask for 2 recent wins
+7. **Growth questions** — 2-3 from pool spanning gratitude, energy, growth, mindset, impact
+8. **Focus Lock-In** — 5 rotating frameworks tracked in streak.json: (A) MIT + If-Then, (B) WOOP Mental Contrasting, (C) Attention Anchor, (D) Distraction Defense, (E) Simple Intention. Each has science citation.
+9. **Journal** — save to `~/.claude/vibes/journal/YYYY-MM-DD.md` with wins, content, growth answers, focus commitment
+10. **Closing energy** — 2-3 sentences referencing specific session content, then stop
+
+**Key rules:** Under 5 min total. Fresh web search only. Interactive not lecture. Rotate frameworks to prevent habituation. Never fabricate research.
+
+## Step 7: Generate CLAUDE.md
+
+Write `CLAUDE.md` with pre-filled universal sections and TODO markers. Replace all `$VARIABLES` with actual values from Step 2.
 
 ```markdown
 # [Project Name] — CLAUDE.md
+
+> Generated by `/big-gulps-huh`. Fill in the TODOs to make Claude useful for YOUR project.
 
 ## Usage Rules
 
@@ -528,12 +462,13 @@ Write a `CLAUDE.md` with pre-filled universal sections and TODO markers:
 - Never edit .env files
 - Prefer editing existing files over creating new ones
 - Keep files under 500 lines — extract when they grow
+- Don't add features or refactor beyond what was asked
 
 ## Verification Checklist
 - [ ] `$LINT_CMD` passes with 0 errors
 - [ ] `$TEST_CMD` passes
-- [ ] No `console.log` in production code <!-- TODO: adapt for your language -->
-- [ ] No `as any` type assertions <!-- TODO: adapt for your language -->
+- [ ] No debug print statements in production code
+- [ ] No type safety bypasses
 - [ ] New files have tests
 
 ## Clarification Protocol
@@ -541,45 +476,43 @@ When a request is ambiguous, Claude MUST ask before implementing:
 1. "Which approach do you prefer?" (with trade-offs)
 2. "Should this be temporary or permanent?"
 3. "What's the expected behavior for edge case X?"
-Never guess on architecture decisions. A 30-second question saves a 30-minute rewrite.
+Never guess on architecture decisions.
 
 ## Hook Reference
-| Hook | Type | Trigger | What It Does |
-|------|------|---------|--------------|
-| .env blocker | Blocking | PreToolUse (Edit/Write) | Prevents editing .env files |
-| Console sentinel | Warning | PostToolUse (Edit/Write) | Warns on debug print statements |
-| Type assertion detector | Warning | PostToolUse (Edit/Write) | Warns on type safety bypasses |
-| Async safety | Warning | PostToolUse (Edit/Write) | Warns on unguarded promises |
-| File size | Warning | PostToolUse (Edit/Write) | Warns on 500+ line files |
-| Session greeting | Info | SessionStart | Shows branch + uncommitted count |
+| Hook | Type | What |
+|------|------|------|
+| .env blocker | Blocking | Prevents editing .env files |
+| Console sentinel | Warning | Warns on debug prints |
+| Type assertion | Warning | Warns on type safety bypasses |
+| Async safety | Warning | Warns on unguarded promises |
+| File size | Warning | Warns on 500+ line files |
+| Session greeting | Info | Shows branch + uncommitted count |
 
 ## Tech Stack
-<!-- TODO: Fill in your stack -->
 | Layer | Technology |
 |-------|-----------|
 | Language | $LANG |
-| Framework | TODO |
+| Framework | <!-- TODO --> |
 | Test Runner | $TEST_CMD |
 | Linter | $LINT_CMD |
 | Package Manager | $PKG_MGR |
 
 ## Commands
-<!-- TODO: Fill in your project commands -->
 | Command | What |
 |---------|------|
 | `$TEST_CMD` | Run tests |
 | `$LINT_CMD` | Type check / lint |
-| TODO | TODO |
+| <!-- TODO --> | <!-- TODO --> |
 
 ## File Structure
-<!-- TODO: Map your project structure -->
-```
+<!-- TODO: Map your actual project structure -->
+\```
 src/           # Source code
 tests/         # Test files
 scripts/       # Build & check scripts
 docs/          # Documentation
 .claude/       # Claude Code config & skills
-```
+\```
 
 ## Code Patterns
 <!-- TODO: Document your patterns -->
@@ -589,255 +522,32 @@ docs/          # Documentation
 - Error handling: TODO
 
 ## Common Gotchas
-- `.env` files are protected — edit manually, never through Claude
-- Commits over 200 lines trigger a warning — split if possible
+- `.env` files are protected — edit manually
+- Commits over 200 lines trigger a warning
 - Direct pushes to main are blocked — use PR workflow
 <!-- TODO: Add project-specific gotchas -->
 
 ## Custom Skills
-| Skill | What It Does |
-|-------|-------------|
-| `/health` | Full project health report |
-| `/preflight` | Pre-push verification checks |
+| Skill | What |
+|-------|------|
+| `/health` | Project health report |
+| `/preflight` | Pre-push checks |
 | `/code-review` | Multi-agent code review |
 | `/deep-review` | 5-agent deep review |
 | `/retro` | Post-session retrospective |
-| `/future-feature` | Feature extraction & backlog management |
-| `/ready-to-commit` | Smart commit preparation |
-| `/learn` | Interactive codebase tutor |
-| `/vibes` | Daily motivation & focus |
+| `/future-feature` | Feature backlog management |
+| `/ready-to-commit` | Smart commit prep |
+| `/learn` | Codebase tutor |
+| `/vibes` | Focus priming |
 ```
-
-Replace `$LANG`, `$TEST_CMD`, `$LINT_CMD`, `$PKG_MGR` with actual values from Step 2.
-
-## Tutorial Mode
-
-When `$TUTORIAL_MODE=true`, insert teaching pauses between each layer. After writing each layer's files, output an explanation block and wait for user acknowledgment before continuing.
-
-### After Layer 1 (Git Hooks) — pause and explain:
-
-```
-📚 LAYER 1: Git Protection
-===========================
-
-I just created 3 git hooks in .git/hooks/. Here's what each one does:
-
-PRE-PUSH — The Bouncer
-  Blocks you from pushing directly to main. Why? Because main is production.
-  Every change goes through a branch → PR → review → merge cycle.
-  Think of it like a "measure twice, cut once" rule for code.
-
-PRE-COMMIT — The Friendly Nudge
-  Warns (doesn't block) when your commit has 200+ new lines.
-  Big commits are hard to review, hard to revert, and hard to understand.
-  If you're over 200 lines, ask: "Is this really ONE change?"
-
-COMMIT-MSG — The Grammar Police
-  Requires commit messages like "feat: add login" or "fix(api): null check".
-  This isn't pedantic — it makes `git log` searchable and changelogs automatic.
-  Six months from now, "feat:" vs "fix:" tells you exactly what happened.
-
-Also created:
-  .gitattributes     — tells git how to handle binary files (images, fonts, locks)
-  scripts/setup-hooks.sh — one-command hook installer for teammates
-
-💡 Key concept: Git hooks run automatically before/after git operations.
-   They live in .git/hooks/ and are NOT committed to the repo (each clone
-   needs to run setup-hooks.sh to install them).
-
-Ready for the next layer? [continue]
-```
-
-### After Layer 2 (Claude Code Hooks) — pause and explain:
-
-```
-📚 LAYER 2: Claude Code Hooks
-===============================
-
-I just created .claude/settings.local.json with AI guardrails.
-
-These are different from git hooks — they run inside Claude Code itself,
-checking every file edit in real-time:
-
-.ENV BLOCKER (Blocking — actually prevents the action)
-  Claude literally cannot edit .env files. This protects credentials
-  from appearing in AI conversation logs or being accidentally committed.
-
-CONSOLE SENTINEL (Warning — lets it through but yells)
-  Flags console.log/warn/error in production code. Debug statements
-  in production leak info and look unprofessional.
-
-TYPE ASSERTION DETECTOR (Warning)
-  Catches `as any` — TypeScript's escape hatch that defeats the
-  whole purpose of using TypeScript.
-
-ASYNC SAFETY (Warning)
-  Finds .then() chains without .catch(). Unhandled promise rejections
-  cause silent failures — your app breaks and nobody knows why.
-
-FILE SIZE (Warning)
-  Flags files over 500 lines. Big files = hard to test, hard to
-  understand, hard to maintain. Extract early, extract often.
-
-SESSION GREETING (Info — just shows status)
-  Shows your current branch and uncommitted file count on startup.
-  Prevents the "wait, am I on main?" panic.
-
-💡 Key concept: "Blocking" hooks prevent the action. "Warning" hooks
-   let it through but show a message. You decide which rules are hard
-   stops vs gentle reminders.
-
-Ready for the next layer? [continue]
-```
-
-### After Layer 3 (Check Scripts) — pause and explain:
-
-```
-📚 LAYER 3: Check Scripts
-===========================
-
-I just created 4 shell scripts in scripts/. These are the engines
-behind the Claude Code hooks from Layer 2.
-
-How they work:
-  1. Claude edits a file
-  2. The hook triggers and pipes the edit info to the script
-  3. The script reads the file path from JSON stdin
-  4. Checks if it's a source file (not test, not config)
-  5. Runs a grep pattern looking for problems
-  6. Prints a warning if found, stays silent if clean
-
-This pattern is reusable — you can copy any of these scripts and
-change the grep pattern to detect whatever matters to your project
-(hardcoded URLs, TODO comments, deprecated APIs, etc.).
-
-💡 Key concept: All 4 scripts exit 0 (non-blocking). They warn but
-   never prevent. If you want a hard stop, change to exit 1. The .env
-   blocker in Layer 2 uses exit 2 — that's the blocking signal.
-
-Ready for the next layer? [continue]
-```
-
-### After Layer 4 (Skills) — pause and explain:
-
-```
-📚 LAYER 4: Portable Skills
-=============================
-
-I just installed 9 skills in .claude/commands/. These are like
-keyboard shortcuts for complex workflows.
-
-The ones you'll use most:
-  /health     — "Is my project broken?" in one command
-  /preflight  — Run before every push (types + tests + lint)
-  /vibes      — Not a joke. Productivity science. Try it Monday.
-
-The power tools:
-  /code-review  — Spawns multiple AI agents to review your code
-  /deep-review  — 5 parallel agents for serious changes
-  /retro        — Captures what you learned after a work session
-
-The planning tools:
-  /future-feature  — Extracts feature ideas from docs/reviews
-  /ready-to-commit — Categorizes your changes and suggests commit messages
-  /learn           — Interactive tutor that teaches YOUR codebase
-
-💡 Key concept: Skills are markdown files that tell Claude HOW to
-   do something. They're like prompts with structure. You can read
-   them, edit them, and create new ones for your own workflows.
-
-Ready for the next layer? [continue]
-```
-
-### After Layer 5 (CLAUDE.md + Guide) — final explanation:
-
-```
-📚 LAYER 5: Documentation
-===========================
-
-Two files:
-
-CLAUDE.md — Your project's constitution
-  This is the single most important file for Claude Code productivity.
-  Every section you fill in makes Claude smarter about YOUR project.
-  The TODOs aren't optional — they're the difference between "generic
-  AI help" and "AI that knows your codebase."
-
-  Priority TODOs (fill these first):
-    1. Tech Stack — what you're building with
-    2. File Structure — where things live
-    3. Code Patterns — how you write code
-    4. Common Gotchas — mistakes to avoid
-
-docs/BIG_GULPS_GUIDE.md — The onboarding guide
-  Share this with anyone joining the project. It explains everything
-  we just set up in plain language with DYOR links for deeper reading.
-
-💡 Key concept: CLAUDE.md is read by Claude at the start of every
-   conversation. It's persistent context. The more accurate it is,
-   the less time you spend correcting Claude's assumptions.
-
-🎓 Tutorial complete! You now understand all 5 layers.
-   Next: Fill in the CLAUDE.md TODOs, then try /health.
-```
-
-Use AskUserQuestion with "Continue to next layer?" between each pause. If user says "skip" or "just finish", drop out of tutorial mode and complete remaining layers without pauses.
 
 ## Step 8: Generate Big Gulps Guide
 
-Write `docs/BIG_GULPS_GUIDE.md` using the `$TONE` preset selected in Step 2.
+Write `docs/BIG_GULPS_GUIDE.md` using the `$TONE` from Step 2. Use the corresponding template below EXACTLY — do not mix tones or improvise sections.
 
-### Tone: Sarcastic (default)
+---
 
-Use these tone rules:
-- Dry humor, not mean
-- Every rule gets a "why" that's slightly embarrassing ("because someone did this")
-- DYOR tags link to real documentation
-- Assume the reader is smart but lazy
-- Channel the energy of a friend who's helping you move but roasting your furniture choices
-
-### Tone: Professional
-
-Use these tone rules:
-- Clear, direct, no humor
-- Every rule gets a business justification ("reduces incident response time")
-- DYOR tags link to real documentation
-- Assume the reader is an experienced developer who values efficiency
-- Channel the energy of well-written internal engineering docs
-
-Adjustments from sarcastic template:
-- Replace the Lloyd Christmas quote with: *"A practical guide to collaborative development with Claude Code."*
-- Replace "more safety nets than a Cirque du Soleil performer" → "a comprehensive set of development guardrails"
-- Replace "fixed stuff is not a commit message, it's a cry for help" → "Descriptive prefixes enable automated changelog generation and searchable history"
-- Replace "that's not a commit, that's a hostage situation" → "Large commits increase review difficulty and revert risk"
-- Replace "how you end up on Hacker News for the wrong reasons" → "Credentials in conversation logs pose a security risk"
-- Replace hook table "Why It Exists (Because Someone Did This)" column → "Rationale"
-- Replace sarcastic hook reasons with professional ones (e.g., "Pushed untested code to main at 2am" → "Enforces code review before integration with the production branch")
-- Replace FAQ answers ("No." / "No." / "No.") → professional explanations
-- Replace "Welcome to the guardrail life" → "Your development environment is configured"
-- Keep all DYOR links, skill tables, and quick start steps identical
-
-### Tone: Minimal
-
-Use these tone rules:
-- No prose, no personality, no explanations
-- Bullet points and tables only
-- Section headers + content, nothing else
-- Assume the reader will look things up if they need to
-
-Adjustments from sarcastic template:
-- No epigraph/quote
-- No "What Just Happened" narrative — replace with 1-line summary
-- Rules section: just the rule name + the hook that enforces it + DYOR link
-- Skills table: keep as-is (already minimal)
-- Hooks table: keep as-is but drop the "Because Someone Did This" column — just "What" and "Why"
-- No CLAUDE.md explanation prose — just "Fill in the TODOs in CLAUDE.md"
-- Quick start: numbered list only, no commentary
-- No FAQ
-- No "One More Thing"
-- Footer: just "Generated by `/big-gulps-huh`"
-
-**Template:**
+### Template: Sarcastic (default)
 
 ```markdown
 # The Big Gulps Guide
@@ -850,35 +560,27 @@ Adjustments from sarcastic template:
 
 ## What Just Happened
 
-You (or someone who cares about you) just ran `/big-gulps-huh` and scaffolded a complete Claude Code collaboration setup into this project. That means git hooks, AI guardrails, portable skills, and a CLAUDE.md constitution. You now have more safety nets than a Cirque du Soleil performer.
+You (or someone who cares about you) just ran `/big-gulps-huh` and scaffolded a complete Claude Code collaboration setup. That means git hooks, AI guardrails, portable skills, and a CLAUDE.md constitution. You now have more safety nets than a Cirque du Soleil performer.
 
 ---
 
 ## The Rules
 
 ### 1. Never Push to Main
-
-The `pre-push` hook will block you. Main is sacred. It's where working code lives. You work on branches, you make PRs, you get them merged. This is not negotiable.
-
-**DYOR:** [Git branching strategies](https://docs.github.com/en/get-started/quickstart/github-flow)
+The `pre-push` hook will block you. Main is sacred. You work on branches, you make PRs, you get them merged. Not negotiable.
+**DYOR:** [GitHub Flow](https://docs.github.com/en/get-started/quickstart/github-flow)
 
 ### 2. Conventional Commits or Go Home
-
-Every commit message needs a prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, etc. The `commit-msg` hook enforces this. "fixed stuff" is not a commit message, it's a cry for help.
-
-**DYOR:** [Conventional Commits spec](https://www.conventionalcommits.org/)
+Every commit needs a prefix: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, etc. "fixed stuff" is not a commit message, it's a cry for help.
+**DYOR:** [Conventional Commits](https://www.conventionalcommits.org/)
 
 ### 3. Keep Commits Small
-
-The `pre-commit` hook warns you at 200+ lines. If your commit touches 47 files, that's not a commit, that's a hostage situation. One logical change per commit.
-
+The `pre-commit` hook warns at 200+ lines. If your commit touches 47 files, that's not a commit, that's a hostage situation.
 **DYOR:** [Atomic commits](https://www.pauline-vos.nl/atomic-commits/)
 
-### 4. Don't Touch .env Files Through Claude
-
-The `.env` blocker hook will physically prevent it. Credentials in AI chat history is how you end up on Hacker News for the wrong reasons.
-
-**DYOR:** [12-Factor App — Config](https://12factor.net/config)
+### 4. Don't Touch .env Through Claude
+The blocker hook will physically prevent it. Credentials in AI chat history is how you end up on Hacker News for the wrong reasons.
+**DYOR:** [12-Factor Config](https://12factor.net/config)
 
 ---
 
@@ -886,17 +588,17 @@ The `.env` blocker hook will physically prevent it. Credentials in AI chat histo
 
 | Skill | What It Does | When to Use It |
 |-------|-------------|----------------|
-| `/health` | Runs types, tests, deps, TODOs, file sizes | "Is everything still working?" |
+| `/health` | Types, tests, deps, TODOs, file sizes | "Is everything still working?" |
 | `/preflight` | Pre-push verification suite | Before every push. Every. Single. One. |
 | `/code-review` | Multi-agent code review | After finishing a feature, before PR |
-| `/deep-review` | 5-agent parallel deep review | For important changes or new architecture |
+| `/deep-review` | 5-agent parallel deep review | Important changes or new architecture |
 | `/retro` | Post-session retrospective | End of a work session — captures lessons |
-| `/future-feature` | Extract & prioritize feature ideas | After reviews, user feedback, brainstorms |
-| `/ready-to-commit` | Smart commit prep with category detection | When you're ready to commit (duh) |
-| `/learn` | Interactive codebase tutor | When you're new or exploring unfamiliar code |
-| `/vibes` | Daily motivation & focus helper | When you need a productivity boost |
+| `/future-feature` | Feature extraction & prioritization | After reviews, feedback, brainstorms |
+| `/ready-to-commit` | Smart commit prep | When you're ready to commit (duh) |
+| `/learn` | Interactive codebase tutor | When you're new or exploring |
+| `/vibes` | Focus priming | Monday mornings. Trust us. |
 
-**Pro tip:** The minimum viable workflow is `/preflight` before pushing and `/health` when things feel off. Everything else is bonus XP.
+**Pro tip:** `/preflight` before pushing + `/health` when things feel off. Everything else is bonus XP.
 
 ---
 
@@ -904,90 +606,226 @@ The `.env` blocker hook will physically prevent it. Credentials in AI chat histo
 
 | Hook | What It Checks | Why It Exists (Because Someone Did This) |
 |------|---------------|------------------------------------------|
-| pre-push | Direct pushes to main | Pushed untested code to main at 2am. Production went down. |
-| pre-commit | Commit size > 200 lines | Made a 3,000-line commit called "updates". Nobody could review it. Ever. |
-| commit-msg | Conventional commit prefix | Wrote "asdf" as a commit message. Six months later, needed to find that change. |
-| .env blocker | .env file edits via Claude | AI assistant helpfully committed AWS keys to a public repo. |
-| Console sentinel | console.log in prod code | Left `console.log("here")` in production. Users saw it. |
-| Type assertion detector | `as any` usage | Cast everything to `any` to "fix" type errors. Created 47 runtime errors. |
-| Async safety | Unguarded promises | Forgot `.catch()`. App silently failed. Users saw a blank screen for 3 days. |
-| File size | Files over 500 lines | Created a 2,400-line "utils.ts". It's still haunted. |
-| Session greeting | Branch + uncommitted files | Started coding on main. Didn't notice for 2 hours. |
+| pre-push | Pushes to main | Pushed untested code to main at 2am. Production went down. |
+| pre-commit | Commit size > 200 lines | Made a 3,000-line commit called "updates". Nobody could review it. |
+| commit-msg | Commit prefix | Wrote "asdf" as a commit message. Needed to find it 6 months later. |
+| .env blocker | .env edits via Claude | AI assistant committed AWS keys to a public repo. |
+| Console sentinel | Debug prints | Left `console.log("here")` in production. Users saw it. |
+| Type assertion | `as any` usage | Cast everything to `any`. Created 47 runtime errors. |
+| Async safety | Missing .catch() | Forgot error handling. App silently failed for 3 days. |
+| File size | 500+ lines | Created a 2,400-line "utils.ts". It's still haunted. |
+| Session greeting | Branch + status | Started coding on main. Didn't notice for 2 hours. |
 
 ---
 
 ## The CLAUDE.md (Your Project's Constitution)
 
-The `CLAUDE.md` file has TODO markers. **Fill them in.** This is not optional busywork — it's what makes Claude actually useful for your specific project instead of giving you generic Stack Overflow answers.
+The `CLAUDE.md` file has TODO markers. **Fill them in.** This isn't busywork — it's what makes Claude useful for YOUR project instead of giving generic answers.
 
-The sections that matter most:
-1. **Tech Stack** — so Claude knows what you're working with
+Priority TODOs:
+1. **Tech Stack** — so Claude knows your tools
 2. **File Structure** — so Claude finds things without asking
-3. **Code Patterns** — so Claude writes code that looks like yours
-4. **Common Gotchas** — so Claude doesn't repeat your past mistakes
+3. **Code Patterns** — so Claude writes code like yours
+4. **Common Gotchas** — so Claude skips your past mistakes
 
-Think of it as onboarding docs, except the new hire is an AI that reads really fast and has zero institutional knowledge.
+Think of it as onboarding docs for an AI that reads fast and knows nothing.
 
 ---
 
 ## Quick Start
 
-1. **Read this guide** *(you're doing it, gold star)*
-2. **Fill in CLAUDE.md TODOs** — Tech Stack, File Structure, Code Patterns
-3. **Run `bash scripts/setup-hooks.sh`** to verify hooks are installed
-4. **Try `/health`** to see your project's current status
+1. **Read this guide** *(gold star)*
+2. **Fill in CLAUDE.md TODOs** — Tech Stack, File Structure, Code Patterns minimum
+3. **Run `bash scripts/setup-hooks.sh`** to verify hooks
+4. **Try `/health`** for project status
 5. **Make a test branch:** `git checkout -b test/my-first-branch`
-6. **Make a small change and commit:** `git commit -m "test: verify hook setup"`
+6. **Test commit:** `git commit -m "test: verify hook setup"`
 7. **Run `/preflight`** before pushing
 
-If all 7 steps work, you're ready. Welcome to the guardrail life.
+All 7 work? Welcome to the guardrail life.
 
 ---
 
 ## FAQ
 
-**Q: Can I push to main?**
-A: No.
-
-**Q: But what if—**
-A: No.
-
-**Q: What if it's really small and I promise it's fine?**
-A: `git push --no-verify` exists for genuine emergencies. If you use it for convenience, the hooks will judge you silently.
-
-**Q: I got a commit message error. What do I do?**
-A: Start your message with a type: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `style:`, `perf:`, `ci:`, `build:`, or `revert:`. That's it. That's the whole thing.
-
-**Q: Claude keeps warning me about console.log. Is it broken?**
-A: It's working perfectly. Remove your console.log statements. Use a proper logger.
-
-**Q: What's `/vibes` actually for?**
-A: Productivity science disguised as fun. Try it on a Monday morning.
-
-**Q: This is a lot of setup. Is it worth it?**
-A: You'll thank us the first time a hook catches something at 2am that would have been a production incident at 8am.
+**Q: Can I push to main?** No.
+**Q: But what if—** No.
+**Q: Really small change, promise it's fine?** `git push --no-verify` for genuine emergencies. Use it for convenience and the hooks judge you silently.
+**Q: Commit message error?** Prefix with: `feat:` `fix:` `docs:` `refactor:` `test:` `chore:` `style:` `perf:` `ci:` `build:` `revert:`
+**Q: Console.log warnings broken?** Working perfectly. Remove your debug statements.
+**Q: What's `/vibes`?** Productivity science disguised as fun. Try it Monday.
+**Q: Worth all this setup?** You'll thank us when a hook catches something at 2am that would've been a production incident at 8am.
 
 ---
 
 ## One More Thing
 
-This setup is a starting point, not a straitjacket. As your project grows:
-- Add project-specific hooks (design token enforcement, API validation, etc.)
+This is a starting point, not a straitjacket:
+- Add project-specific hooks as patterns emerge
 - Create custom skills for repetitive workflows
-- Update CLAUDE.md as patterns evolve
+- Update CLAUDE.md as your project evolves
 - Run `/retro` regularly to capture what you've learned
 
-The goal isn't perfection — it's fewer "oh no" moments and more "oh nice" moments.
+Fewer "oh no" moments. More "oh nice" moments.
 
 ---
 
-*Generated by `/big-gulps-huh` — your friendly neighborhood scaffolder.*
-*DYOR: Do Your Own Research. The links above are starting points, not gospel.*
+*Generated by `/big-gulps-huh`*
+*DYOR: Do Your Own Research. Links above are starting points, not gospel.*
+```
+
+---
+
+### Template: Professional
+
+```markdown
+# Development Environment Guide
+
+*A practical guide to collaborative development with Claude Code.*
+
+---
+
+## Overview
+
+This project is configured with automated development guardrails: git hooks for workflow enforcement, AI-assisted code quality hooks, portable development skills, and a project configuration file (CLAUDE.md).
+
+---
+
+## Development Workflow
+
+**Branch Protection:** All changes go through pull requests. The `pre-push` hook prevents direct pushes to main.
+*Ref: [GitHub Flow](https://docs.github.com/en/get-started/quickstart/github-flow)*
+
+**Commit Standards:** Commits require conventional prefixes (`feat:`, `fix:`, `docs:`, etc.) enforced by the `commit-msg` hook. Enables automated changelogs and searchable history.
+*Ref: [Conventional Commits](https://www.conventionalcommits.org/)*
+
+**Commit Size:** The `pre-commit` hook warns at 200+ lines. Smaller commits improve reviewability and enable granular reverts.
+*Ref: [Atomic Commits](https://www.pauline-vos.nl/atomic-commits/)*
+
+**Credential Safety:** The `.env` blocker hook prevents Claude from editing environment files, keeping credentials out of AI conversation logs.
+*Ref: [12-Factor Config](https://12factor.net/config)*
+
+---
+
+## Available Skills
+
+| Skill | Purpose | Recommended Usage |
+|-------|---------|-------------------|
+| `/health` | Project health report | Diagnosing issues |
+| `/preflight` | Pre-push verification | Before every push |
+| `/code-review` | Multi-agent code review | Before pull requests |
+| `/deep-review` | 5-agent deep review | Significant changes |
+| `/retro` | Session retrospective | End of work sessions |
+| `/future-feature` | Feature backlog management | After feedback cycles |
+| `/ready-to-commit` | Commit preparation | Before committing |
+| `/learn` | Codebase tutor | Onboarding, exploration |
+| `/vibes` | Focus priming | Session start |
+
+**Recommended workflow:** `/preflight` before every push. `/health` for diagnostics.
+
+---
+
+## Automated Hooks
+
+| Hook | Checks | Type | Rationale |
+|------|--------|------|-----------|
+| pre-push | Main branch pushes | Blocking | Enforces code review before production integration |
+| pre-commit | Commit size | Warning | Reduces review burden and revert risk |
+| commit-msg | Commit format | Blocking | Enables searchable history and automated changelogs |
+| .env blocker | .env file edits | Blocking | Prevents credential exposure in AI logs |
+| Console sentinel | Debug statements | Warning | Removes development artifacts from production |
+| Type assertion | Type safety bypasses | Warning | Maintains type system integrity |
+| Async safety | Unguarded promises | Warning | Prevents silent runtime failures |
+| File size | 500+ line files | Warning | Promotes modular architecture |
+| Session greeting | Branch + status | Info | Provides situational awareness on startup |
+
+---
+
+## CLAUDE.md Configuration
+
+Complete the TODO sections in `CLAUDE.md` to optimize Claude's assistance:
+1. **Tech Stack** — Technologies and versions
+2. **File Structure** — Project directory layout
+3. **Code Patterns** — Established conventions
+4. **Common Gotchas** — Known pitfalls and constraints
+
+---
+
+## Getting Started
+
+1. Complete CLAUDE.md TODO sections
+2. Verify hooks: `bash scripts/setup-hooks.sh`
+3. Run `/health` for project status
+4. Create test branch: `git checkout -b test/setup-verification`
+5. Verify commit hooks: `git commit -m "test: verify setup"`
+6. Run `/preflight` before pushing
+
+---
+
+*Generated by `/big-gulps-huh`*
+*Reference links are starting points — consult official documentation for current information.*
+```
+
+---
+
+### Template: Minimal
+
+```markdown
+# Dev Environment
+
+## Workflow
+- Branch → PR → merge (no direct pushes to main)
+- Conventional commits: `feat:` `fix:` `docs:` `refactor:` `test:` `chore:`
+- 200+ line commits trigger warning
+- .env files protected from AI edits
+
+## Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `/health` | Project health report |
+| `/preflight` | Pre-push checks |
+| `/code-review` | Code review |
+| `/deep-review` | Deep 5-agent review |
+| `/retro` | Session retrospective |
+| `/future-feature` | Feature backlog |
+| `/ready-to-commit` | Commit preparation |
+| `/learn` | Codebase tutor |
+| `/vibes` | Focus priming |
+
+## Hooks
+
+| Hook | Checks | Blocking |
+|------|--------|----------|
+| pre-push | Main branch pushes | Yes |
+| pre-commit | Commit size | No |
+| commit-msg | Commit format | Yes |
+| .env blocker | .env edits | Yes |
+| Console sentinel | Debug statements | No |
+| Type assertion | Type bypasses | No |
+| Async safety | Missing .catch() | No |
+| File size | 500+ lines | No |
+
+## Setup
+1. Fill in CLAUDE.md TODOs
+2. `bash scripts/setup-hooks.sh`
+3. `/health`
+4. `git checkout -b test/setup && git commit -m "test: verify hooks"`
+5. `/preflight`
+
+## References
+- [GitHub Flow](https://docs.github.com/en/get-started/quickstart/github-flow)
+- [Conventional Commits](https://www.conventionalcommits.org/)
+- [12-Factor Config](https://12factor.net/config)
+
+---
+
+*Generated by `/big-gulps-huh`*
 ```
 
 ## Step 9: Final Report
 
-After scaffolding, print a summary:
+After scaffolding, print:
 
 ```
 ✅ Big Gulps scaffolding complete!
@@ -998,32 +836,166 @@ After scaffolding, print a summary:
     .git/hooks/commit-msg     — Conventional commits required
 
   Claude Code Hooks:
-    .claude/settings.local.json — 6 hooks wired
+    .claude/settings.local.json — [N] hooks wired
 
   Check Scripts:
-    scripts/check-console-log.sh
-    scripts/check-as-any.sh      (or language equivalent)
-    scripts/check-async-safety.sh
-    scripts/check-file-size.sh
+    scripts/[list actual scripts written]
 
   Skills (9):
-    .claude/commands/future-feature.md
-    .claude/commands/ready-to-commit.md
-    .claude/commands/code-review.md
-    .claude/commands/deep-review.md
-    .claude/commands/preflight.md
-    .claude/commands/health.md
-    .claude/commands/retro.md
-    .claude/commands/learn.md
-    .claude/commands/vibes.md
+    .claude/commands/ — health, preflight, code-review, deep-review,
+    retro, future-feature, ready-to-commit, learn, vibes
 
   Documentation:
     CLAUDE.md                    — Fill in the TODOs!
     docs/BIG_GULPS_GUIDE.md      — Share with your team
 
   Next steps:
-    1. Fill in CLAUDE.md TODOs
+    1. Fill in CLAUDE.md TODOs (Tech Stack, File Structure, Code Patterns)
     2. Run: bash scripts/setup-hooks.sh
     3. Try: /health
     4. Read: docs/BIG_GULPS_GUIDE.md
+```
+
+If `$TUTORIAL_MODE` was active, add: "Tutorial complete! You now understand all 5 layers."
+
+---
+
+## Tutorial Mode
+
+When `$TUTORIAL_MODE=true`, insert teaching pauses between each layer. After writing each layer's files, output an explanation block and use AskUserQuestion with "Continue to next layer?" before proceeding. If user says "skip" or "just finish", complete remaining layers without pauses.
+
+### After Layer 1 (Git Hooks):
+
+```
+📚 LAYER 1: Git Protection
+===========================
+
+3 git hooks now live in .git/hooks/:
+
+PRE-PUSH — The Bouncer
+  Blocks pushing directly to main. Every change goes through
+  branch → PR → review → merge. Non-negotiable.
+
+PRE-COMMIT — The Friendly Nudge
+  Warns (doesn't block) at 200+ lines. Big commits are hard
+  to review and hard to revert. "Is this really ONE change?"
+
+COMMIT-MSG — The Grammar Police
+  Requires prefixes like "feat:" or "fix:". Makes git log
+  searchable and changelogs automatic.
+
+Also created:
+  .gitattributes     — binary file handling (images, fonts, locks)
+  scripts/setup-hooks.sh — hook installer for teammates
+
+💡 Git hooks run automatically before/after git operations.
+   They live in .git/hooks/ and are NOT committed — each clone
+   needs to run setup-hooks.sh to install them.
+```
+
+### After Layer 2 (Claude Code Hooks):
+
+```
+📚 LAYER 2: Claude Code Hooks
+===============================
+
+.claude/settings.local.json now has AI guardrails:
+
+.ENV BLOCKER (Blocking — prevents the action)
+  Claude cannot edit .env files. Protects credentials from
+  appearing in AI logs or being accidentally committed.
+
+CONSOLE SENTINEL (Warning — lets it through, shows message)
+  Flags debug print statements in production code.
+
+TYPE ASSERTION DETECTOR (Warning)
+  Catches type safety bypasses (as any, # type: ignore).
+
+ASYNC SAFETY (Warning)
+  Finds .then() chains without .catch(). Unhandled rejections
+  cause silent failures.
+
+FILE SIZE (Warning)
+  Flags files over 500 lines. Big files = hard to maintain.
+
+SESSION GREETING (Info — just shows status)
+  Shows current branch + uncommitted count on startup.
+
+💡 "Blocking" hooks prevent the action (exit 2).
+   "Warning" hooks let it through but show a message (exit 0).
+```
+
+### After Layer 3 (Check Scripts):
+
+```
+📚 LAYER 3: Check Scripts
+===========================
+
+Shell scripts in scripts/ power the Layer 2 hooks.
+
+How they work:
+  1. Claude edits a file
+  2. Hook triggers, pipes edit info to the script
+  3. Script reads file path from JSON stdin
+  4. Checks if it's a source file (not test, not config)
+  5. Greps for problems, prints warning if found
+
+This pattern is reusable — copy any script and change the
+grep pattern for your own checks (hardcoded URLs, deprecated
+APIs, TODO comments, etc.).
+
+💡 All scripts exit 0 (non-blocking warnings). To make one
+   a hard stop, change to exit 1. The .env blocker uses
+   exit 2 — that's the blocking signal.
+```
+
+### After Layer 4 (Skills):
+
+```
+📚 LAYER 4: Portable Skills
+=============================
+
+9 skills now live in .claude/commands/:
+
+Most used:
+  /health     — "Is my project broken?" in one command
+  /preflight  — Run before every push (types + tests + lint)
+  /vibes      — Productivity science. Seriously. Try it.
+
+Power tools:
+  /code-review  — Multiple AI agents review your code
+  /deep-review  — 5 parallel agents for serious changes
+  /retro        — Captures lessons after a work session
+
+Planning:
+  /future-feature  — Feature extraction from docs/reviews
+  /ready-to-commit — Categorizes changes, suggests messages
+  /learn           — Interactive tutor for YOUR codebase
+
+💡 Skills are markdown files that tell Claude HOW to do
+   something. Read them, edit them, create your own.
+```
+
+### After Layer 5 (CLAUDE.md + Guide):
+
+```
+📚 LAYER 5: Documentation
+===========================
+
+CLAUDE.md — Your project's constitution
+  Every section you fill in makes Claude smarter about YOUR
+  project. The TODOs aren't optional — they're the difference
+  between generic help and project-aware help.
+
+  Priority: Tech Stack → File Structure → Code Patterns → Gotchas
+
+docs/BIG_GULPS_GUIDE.md — The onboarding guide
+  Share with anyone joining the project. Explains everything
+  in plain language with reference links.
+
+💡 CLAUDE.md is read at the start of every Claude conversation.
+   The more accurate it is, the less time correcting assumptions.
+
+🎓 Tutorial complete! You understand all 5 layers.
+   Next: Fill in the CLAUDE.md TODOs, then try /health.
 ```
