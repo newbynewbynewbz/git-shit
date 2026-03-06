@@ -1,0 +1,23 @@
+# Images — binary, no text diffs
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.svg text
+
+# Fonts — always binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# Lock files — don't manually merge
+package-lock.json -diff merge=ours
+yarn.lock -diff merge=ours
+bun.lockb binary
+Cargo.lock -diff merge=ours
+
+# Auto-normalize line endings
+* text=auto

@@ -1,0 +1,44 @@
+#!/bin/bash
+# Commit-msg hook: Enforce conventional commit prefixes
+# Valid: feat: fix: refactor: docs: test: chore: style: perf: ci: build: revert:
+# Scopes optional: feat(auth): fix(api):
+
+MSG_FILE="$1"
+MSG=$(head -1 "$MSG_FILE")
+
+# Allow merge commits
+if echo "$MSG" | grep -qE '^Merge '; then
+  exit 0
+fi
+
+# Allow squash merge commits from GitHub
+if echo "$MSG" | grep -qE '^\S+.*\(#[0-9]+\)$'; then
+  exit 0
+fi
+
+# Allow fixup/squash commits
+if echo "$MSG" | grep -qE '^(fixup|squash)! '; then
+  exit 0
+fi
+
+# Check for conventional commit prefix
+if echo "$MSG" | grep -qE '^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert)(\([a-zA-Z0-9_-]+\))?!?: .+'; then
+  exit 0
+fi
+
+echo ""
+echo "🛑 Commit message rejected — missing conventional prefix"
+echo ""
+echo "  Your message:  $MSG"
+echo ""
+echo "  Required format: <type>(<scope>): <description>"
+echo ""
+echo "  Types: feat fix refactor docs test chore style perf ci build revert"
+echo "  Scope: optional — e.g., feat(auth): or fix(api):"
+echo ""
+echo "  Examples:"
+echo "    feat: add user authentication flow"
+echo "    fix(api): prevent crash on empty response"
+echo "    docs: update contributing guide"
+echo ""
+exit 1
