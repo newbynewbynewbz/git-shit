@@ -16,6 +16,16 @@ if [ "$INSERTIONS" -gt "$WARN_THRESHOLD" ]; then
   echo "  Consider splitting into smaller atomic commits."
   echo "  Ask: 'Is this truly ONE logical change?'"
   echo ""
+  echo "  Tip: use 'git add -p' to stage changes hunk-by-hunk"
+  echo "       and split this into multiple focused commits."
+  echo ""
+fi
+
+# Non-blocking whitespace check
+if ! git diff --cached --check > /dev/null 2>&1; then
+  echo "⚠️  Whitespace issues detected (trailing spaces, mixed tabs)"
+  echo "  Run: git diff --cached --check    to see details"
+  echo ""
 fi
 
 exit 0

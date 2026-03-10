@@ -1,0 +1,86 @@
+#!/bin/bash
+# Git Shit: pre-rebase hook
+# Prevents rebasing commits that have already been pushed to a remote
+# Protects shared history from accidental rewriting
+
+UPSTREAM="$1"
+BRANCH="$2"
+
+# If no branch specified, we're rebasing the current branch
+if [ -z "$BRANCH" ]; then
+  BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+fi
+
+# Skip if we can't determine the branch (detached HEAD)
+if [ -z "$BRANCH" ]; then
+  exit 0
+fi
+
+# Check if this branch has a remote tracking branch
+REMOTE_REF=$(git rev-parse --verify "origin/$BRANCH" 2>/dev/null)
+if [ -z "$REMOTE_REF" ]; then
+  # No remote tracking — local only, safe to rebase
+  exit 0
+fi
+
+# Check if the local branch has commits that exist on the remote
+# If local and remote point to the same commit, rebasing is fine
+# (we're rebasing on top of remote changes)
+LOCAL_REF=$(git rev-parse "$BRANCH" 2>/dev/null)
+if [ "$LOCAL_REF" = "$REMOTE_REF" ]; then
+  exit 0
+fi
+
+# Check if there are commits on the remote that would be rewritten
+PUSHED_COMMITS=$(git log --oneline "origin/$BRANCH..$BRANCH" 2>/dev/null | wc -l | tr -d ' ')
+
+if [ "$PUSHED_COMMITS" -gt 0 ]; then
+  # The local branch is ahead — those unpushed commits are safe to rebase
+  # But check if the remote has diverged (someone else pushed)
+  REMOTE_ONLY=$(git log --oneline "$BRANCH..origin/$BRANCH" 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$REMOTE_ONLY" -gt 0 ]; then
+    echo ""
+    echo "⚠️  Rebase warning: origin/$BRANCH has diverged"
+    echo ""
+    echo "  Your branch and the remote have both changed."
+    echo "  Rebasing may rewrite commits others have seen."
+    echo ""
+    echo "  Consider: git pull --rebase origin $BRANCH"
+    echo "  Or merge: git merge origin/$BRANCH"
+    echo ""
+    # Warning only — don't block (user may know what they're doing)
+  fi
+  exit 0
+fi
+
+# The remote is ahead or equal — check if we'd rewrite pushed commits
+WOULD_REWRITE=$(git log --oneline "$UPSTREAM..$BRANCH" 2>/dev/null)
+REWRITE_COUNT=$(echo "$WOULD_REWRITE" | grep -c '^' 2>/dev/null)
+
+# Check if any of those commits exist on the remote
+SHARED_COUNT=0
+while IFS= read -r line; do
+  SHA=$(echo "$line" | awk '{print $1}')
+  if git branch -r --contains "$SHA" 2>/dev/null | grep -q "origin/$BRANCH"; then
+    SHARED_COUNT=$((SHARED_COUNT + 1))
+  fi
+done <<< "$WOULD_REWRITE"
+
+if [ "$SHARED_COUNT" -gt 0 ]; then
+  echo ""
+  echo "🛑 Rebase blocked — $SHARED_COUNT commit(s) already pushed to origin/$BRANCH"
+  echo ""
+  echo "  Rebasing pushed commits rewrites shared history."
+  echo "  This forces teammates to deal with diverged branches."
+  echo ""
+  echo "  Instead:"
+  echo "    git merge $UPSTREAM          # merge instead of rebase"
+  echo "    git pull --no-rebase         # pull with merge"
+  echo ""
+  echo "  If you're sure (solo branch, force-push planned):"
+  echo "    git rebase $UPSTREAM --no-verify"
+  echo ""
+  exit 1
+fi
+
+exit 0

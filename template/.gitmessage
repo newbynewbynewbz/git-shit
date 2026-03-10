@@ -1,0 +1,17 @@
+
+# <type>(<scope>): <description>
+#
+# Types: feat fix refactor docs test chore style perf ci build revert
+# Scope: optional — e.g., feat(auth): fix(api):
+#
+# Examples:
+#   feat: add user authentication flow
+#   fix(api): prevent crash on empty response
+#   refactor(db): extract query builder
+#   docs: update contributing guide
+#
+# Rules:
+#   - Start with a type prefix (required)
+#   - Use imperative mood: "add" not "added"
+#   - No period at the end
+#   - Keep the first line under 72 characters

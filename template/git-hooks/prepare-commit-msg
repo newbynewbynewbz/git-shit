@@ -1,0 +1,38 @@
+#!/bin/bash
+# Git Shit: prepare-commit-msg hook
+# Pre-fills conventional commit prefix from branch name
+# Fires before the editor opens — shows correct format before you type
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Only auto-fill for new commits (not merges, amends, squashes, etc.)
+if [ -n "$COMMIT_SOURCE" ]; then
+  exit 0
+fi
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# Extract type from branch name: feat/add-login -> feat
+TYPE=$(echo "$BRANCH" | sed -n 's|^\(feat\|fix\|refactor\|docs\|test\|chore\|style\|perf\|ci\|build\|revert\)/.*|\1|p')
+
+# Extract scope from branch name: feat/auth/add-login -> feat(auth)
+SCOPE=$(echo "$BRANCH" | sed -n 's|^\(feat\|fix\|refactor\|docs\|test\|chore\|style\|perf\|ci\|build\|revert\)/\([a-zA-Z0-9_-]*\)/.*|\2|p')
+
+# Only pre-fill if the first line is empty (not already filled by template or -m)
+FIRST_LINE=$(head -1 "$COMMIT_MSG_FILE")
+if [ -n "$TYPE" ] && [ -z "$FIRST_LINE" ]; then
+  if [ -n "$SCOPE" ]; then
+    PREFIX="$TYPE($SCOPE): "
+  else
+    PREFIX="$TYPE: "
+  fi
+  # Prepend prefix to the commit message file
+  TEMP=$(mktemp)
+  echo "$PREFIX" > "$TEMP"
+  # Append original content (template comments, etc.)
+  tail -n +2 "$COMMIT_MSG_FILE" >> "$TEMP"
+  mv "$TEMP" "$COMMIT_MSG_FILE"
+fi
+
+exit 0
