@@ -14,11 +14,13 @@
 *.woff2 binary
 
 # Lock files — don't manually merge, keep ours on conflict
-# Requires: git config merge.ours.driver true (setup-hooks.sh handles this)
+# Requires: git config merge.ours.driver true (setup.sh handles this)
 package-lock.json -diff merge=ours
 yarn.lock -diff merge=ours
 bun.lockb binary
 Cargo.lock -diff merge=ours
+pnpm-lock.yaml -diff merge=ours
+Gemfile.lock -diff merge=ours
 
 # Auto-normalize line endings
 * text=auto
