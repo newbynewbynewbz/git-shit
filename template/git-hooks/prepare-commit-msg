@@ -32,7 +32,7 @@ if [ -n "$TYPE" ] && [ -z "$FIRST_LINE" ]; then
     PREFIX="$TYPE: "
   fi
   # Prepend prefix to the commit message file
-  TEMP=$(mktemp)
+  TEMP=$(mktemp) || exit 0
   echo "$PREFIX" > "$TEMP"
   # Append original content (template comments, etc.)
   tail -n +2 "$COMMIT_MSG_FILE" >> "$TEMP"

@@ -9,18 +9,10 @@ _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 PROTECTED_BRANCHES="${GIT_SHIT_PROTECTED_BRANCHES:-${PROTECTED_BRANCHES:-main}}"
 
-BRANCH=$(git branch --show-current)
-REMOTE="$1"
-
 while read local_ref local_sha remote_ref remote_sha; do
-  # Check each protected branch (pipe-separated)
   IFS='|' read -ra BRANCHES <<< "$PROTECTED_BRANCHES"
   for PROTECTED in "${BRANCHES[@]}"; do
-    if [ "$remote_ref" = "refs/heads/$PROTECTED" ] && [ "$BRANCH" = "$PROTECTED" ]; then
-      if echo "$local_ref" | grep -q "refs/tags/"; then
-        continue
-      fi
-
+    if [ "$remote_ref" = "refs/heads/$PROTECTED" ]; then
       echo ""
       echo "🛑 Direct push to $PROTECTED blocked"
       echo ""

@@ -15,6 +15,11 @@ if [ "$COMMIT_MSG_MODE" = "off" ]; then
 fi
 
 MSG_FILE="$1"
+
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+  exit 0
+fi
+
 MSG=$(head -1 "$MSG_FILE")
 
 # Allow merge commits
