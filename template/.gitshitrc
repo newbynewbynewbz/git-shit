@@ -1,0 +1,8 @@
+# .gitshitrc — git-shit configuration
+# Team defaults. Individual devs can override with env vars (GIT_SHIT_<KEY>).
+# This file should be committed to your repo.
+
+COMMIT_MSG_MODE=warn           # strict | warn | off
+SECRET_SCAN=on                 # on | off
+LARGE_COMMIT_THRESHOLD=200     # line count before warning
+PROTECTED_BRANCHES=main        # pipe-separated: main|develop|staging
