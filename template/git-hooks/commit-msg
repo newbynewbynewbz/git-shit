@@ -1,7 +1,18 @@
 #!/bin/bash
-# Commit-msg hook: Enforce conventional commit prefixes
-# Valid: feat: fix: refactor: docs: test: chore: style: perf: ci: build: revert:
-# Scopes optional: feat(auth): fix(api):
+# Git Shit: Commit-msg hook
+# Enforces conventional commit prefixes
+# Modes: strict (block) | warn (suggest) | off (skip)
+
+# --- Config loader ---
+_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+
+COMMIT_MSG_MODE="${GIT_SHIT_COMMIT_MSG:-${COMMIT_MSG_MODE:-warn}}"
+
+# Skip entirely if turned off
+if [ "$COMMIT_MSG_MODE" = "off" ]; then
+  exit 0
+fi
 
 MSG_FILE="$1"
 MSG=$(head -1 "$MSG_FILE")
@@ -26,8 +37,13 @@ if echo "$MSG" | grep -qE '^(feat|fix|refactor|docs|test|chore|style|perf|ci|bui
   exit 0
 fi
 
+# Message doesn't conform — behavior depends on mode
 echo ""
-echo "🛑 Commit message rejected — missing conventional prefix"
+if [ "$COMMIT_MSG_MODE" = "strict" ]; then
+  echo "🛑 Commit message rejected — missing conventional prefix"
+else
+  echo "💡 Commit message suggestion — consider using a conventional prefix"
+fi
 echo ""
 echo "  Your message:  $MSG"
 echo ""
@@ -41,4 +57,9 @@ echo "    feat: add user authentication flow"
 echo "    fix(api): prevent crash on empty response"
 echo "    docs: update contributing guide"
 echo ""
-exit 1
+
+if [ "$COMMIT_MSG_MODE" = "strict" ]; then
+  exit 1
+fi
+
+exit 0
