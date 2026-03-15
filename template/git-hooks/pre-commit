@@ -1,14 +1,91 @@
 #!/bin/bash
-# Pre-commit hook: Commit size warning
-# Non-blocking warning when staged changes exceed threshold
+# Git Shit: Pre-commit hook
+# 1. Secret scanning (hard block when on)
+# 2. Large commit warning (non-blocking)
+# 3. Whitespace check (non-blocking)
 
-WARN_THRESHOLD=200
+# --- Config loader ---
+_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
 
+SECRET_SCAN="${GIT_SHIT_SECRET_SCAN:-${SECRET_SCAN:-on}}"
+LARGE_COMMIT_THRESHOLD="${GIT_SHIT_LARGE_COMMIT_THRESHOLD:-${LARGE_COMMIT_THRESHOLD:-200}}"
+
+# --- 1. Secret scanning ---
+if [ "$SECRET_SCAN" = "on" ]; then
+  SECRETS_FOUND=0
+
+  # Check staged filenames (basename only)
+  STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+  for file in $STAGED_FILES; do
+    base=$(basename "$file")
+    case "$base" in
+      .env|.env.*) ;;
+      *.pem|*.key) ;;
+      id_rsa|id_ed25519) ;;
+      *) continue ;;
+    esac
+    if [ "$SECRETS_FOUND" -eq 0 ]; then
+      echo ""
+      echo "🛑 Possible secrets detected in staged files:"
+      echo ""
+    fi
+    echo "  File: $file"
+    SECRETS_FOUND=$((SECRETS_FOUND + 1))
+  done
+
+  # Scan staged file contents for secret patterns
+  STAGED_CONTENT=$(git diff --cached -U0 --diff-filter=ACM 2>/dev/null)
+  PATTERNS=(
+    'AKIA[0-9A-Z]{16}'
+    '-----BEGIN.*PRIVATE KEY-----'
+    'sk-[a-zA-Z0-9]{20,}'
+    'ghp_[a-zA-Z0-9]{36}'
+  )
+  PATTERN_NAMES=(
+    "AWS access key"
+    "Private key"
+    "API secret key (sk-...)"
+    "GitHub personal access token"
+  )
+
+  for i in "${!PATTERNS[@]}"; do
+    MATCHES=$(echo "$STAGED_CONTENT" | grep -nE "^\+" | grep -E "${PATTERNS[$i]}" 2>/dev/null)
+    if [ -n "$MATCHES" ]; then
+      if [ "$SECRETS_FOUND" -eq 0 ]; then
+        echo ""
+        echo "🛑 Possible secrets detected in staged files:"
+        echo ""
+      fi
+      echo "  Pattern: ${PATTERN_NAMES[$i]}"
+      echo "$MATCHES" | head -3 | while read -r line; do
+        echo "    $line"
+      done
+      MATCH_COUNT=$(echo "$MATCHES" | wc -l | tr -d ' ')
+      if [ "$MATCH_COUNT" -gt 3 ]; then
+        echo "    ... and $((MATCH_COUNT - 3)) more"
+      fi
+      SECRETS_FOUND=$((SECRETS_FOUND + 1))
+    fi
+  done
+
+  if [ "$SECRETS_FOUND" -gt 0 ]; then
+    echo ""
+    echo "  To bypass for test fixtures with fake keys:"
+    echo "    GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
+    echo ""
+    echo "  For comprehensive scanning, check out: https://github.com/gitleaks/gitleaks"
+    echo ""
+    exit 1
+  fi
+fi
+
+# --- 2. Large commit warning (non-blocking) ---
 INSERTIONS=$(git diff --cached --numstat | awk '{sum+=$1} END{print sum+0}')
 
-if [ "$INSERTIONS" -gt "$WARN_THRESHOLD" ]; then
+if [ "$INSERTIONS" -gt "$LARGE_COMMIT_THRESHOLD" ]; then
   echo ""
-  echo "⚠️  Commit size warning: $INSERTIONS insertions (threshold: $WARN_THRESHOLD)"
+  echo "⚠️  Commit size warning: $INSERTIONS insertions (threshold: $LARGE_COMMIT_THRESHOLD)"
   echo ""
   echo "  Staged files:"
   git diff --cached --stat | tail -1
@@ -21,7 +98,7 @@ if [ "$INSERTIONS" -gt "$WARN_THRESHOLD" ]; then
   echo ""
 fi
 
-# Non-blocking whitespace check
+# --- 3. Non-blocking whitespace check ---
 if ! git diff --cached --check > /dev/null 2>&1; then
   echo "⚠️  Whitespace issues detected (trailing spaces, mixed tabs)"
   echo "  Run: git diff --cached --check    to see details"
