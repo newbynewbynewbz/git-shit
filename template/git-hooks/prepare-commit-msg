@@ -3,6 +3,10 @@
 # Pre-fills conventional commit prefix from branch name
 # Fires before the editor opens — shows correct format before you type
 
+# --- Config loader ---
+_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
 

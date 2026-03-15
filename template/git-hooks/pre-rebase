@@ -3,6 +3,10 @@
 # Prevents rebasing commits that have already been pushed to a remote
 # Protects shared history from accidental rewriting
 
+# --- Config loader ---
+_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+
 UPSTREAM="$1"
 BRANCH="$2"
 

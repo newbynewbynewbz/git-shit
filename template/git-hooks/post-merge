@@ -2,6 +2,10 @@
 # Git Shit: post-merge hook
 # Reminds you to install dependencies when lock files change after pull/merge
 
+# --- Config loader ---
+_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+
 CHANGED=$(git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null)
 
 if [ -z "$CHANGED" ]; then
