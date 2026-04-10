@@ -5,7 +5,9 @@
 
 # --- Config loader ---
 _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+if [ -f "$_git_shit_root/.gitshitrc" ]; then
+  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
+fi
 
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
@@ -27,16 +29,18 @@ TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
 
 # Hint if branch name doesn't follow convention (only when TEACH_MODE is on)
 if [ -z "$TYPE" ] && [ -n "$BRANCH" ] && [ "$TEACH_MODE" = "on" ]; then
-  # Don't warn for protected branches or detached HEAD
-  case "$BRANCH" in
-    main|master|develop|staging|production) ;;
-    *)
-      echo "" >&2
-      echo "💡 Tip: Name branches as <type>/<description> for auto-prefill" >&2
-      echo "   Example: feat/add-login, fix/null-check" >&2
-      echo "" >&2
-      ;;
-  esac
+  # Don't warn for protected branches
+  _IS_PROTECTED=false
+  IFS='|' read -ra _PROT_LIST <<< "${PROTECTED_BRANCHES:-main}"
+  for _pb in "${_PROT_LIST[@]}"; do
+    [ "$BRANCH" = "$_pb" ] && _IS_PROTECTED=true
+  done
+  if [ "$_IS_PROTECTED" = "false" ]; then
+    echo "" >&2
+    echo "💡 Tip: Name branches as <type>/<description> for auto-prefill" >&2
+    echo "   Example: feat/add-login, fix/null-check" >&2
+    echo "" >&2
+  fi
 fi
 
 # Only pre-fill if the first line is empty (not already filled by template or -m)
@@ -49,10 +53,12 @@ if [ -n "$TYPE" ] && [ -z "$FIRST_LINE" ]; then
   fi
   # Prepend prefix to the commit message file
   TEMP=$(mktemp) || exit 0
+  trap 'rm -f "$TEMP"' EXIT
   echo "$PREFIX" > "$TEMP"
   # Append original content (template comments, etc.)
   tail -n +2 "$COMMIT_MSG_FILE" >> "$TEMP"
   mv "$TEMP" "$COMMIT_MSG_FILE"
+  trap - EXIT
 fi
 
 exit 0

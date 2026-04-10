@@ -5,7 +5,9 @@
 
 # --- Config loader ---
 _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+if [ -f "$_git_shit_root/.gitshitrc" ]; then
+  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
+fi
 
 COMMIT_MSG_MODE="${GIT_SHIT_COMMIT_MSG:-${COMMIT_MSG_MODE:-warn}}"
 TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"

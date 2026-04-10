@@ -6,7 +6,9 @@
 
 # --- Config loader ---
 _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+if [ -f "$_git_shit_root/.gitshitrc" ]; then
+  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
+fi
 
 SECRET_SCAN="${GIT_SHIT_SECRET_SCAN:-${SECRET_SCAN:-on}}"
 LARGE_COMMIT_THRESHOLD="${GIT_SHIT_LARGE_COMMIT_THRESHOLD:-${LARGE_COMMIT_THRESHOLD:-200}}"

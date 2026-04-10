@@ -29,18 +29,18 @@ echo "Installing git-shit into: $REPO_ROOT"
 echo ""
 
 # Auto-detect default branch
-DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-if [ -z "$DEFAULT_BRANCH" ]; then
-  PROTECTED_BRANCHES="main|master"
-  echo "  No remote detected — protecting both main and master"
-else
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' | tr -d '[:space:]')
+if [ -n "$DEFAULT_BRANCH" ] && [[ "$DEFAULT_BRANCH" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
   PROTECTED_BRANCHES="$DEFAULT_BRANCH"
   echo "  Detected default branch: $DEFAULT_BRANCH"
+else
+  PROTECTED_BRANCHES="main|master"
+  echo "  No remote detected — protecting both main and master"
 fi
 
 # Copy hooks
-mkdir -p scripts/git-hooks
-cp "$TEMPLATE_DIR"/git-hooks/* scripts/git-hooks/
+mkdir -p scripts/git-hooks || { echo "Error: failed to create scripts/git-hooks/"; exit 1; }
+cp "$TEMPLATE_DIR"/git-hooks/* scripts/git-hooks/ || { echo "Error: failed to copy hooks"; exit 1; }
 chmod +x scripts/git-hooks/*
 echo "  Copied 6 hooks -> scripts/git-hooks/"
 
@@ -72,8 +72,8 @@ cp "$TEMPLATE_DIR/.github/pull_request_template.md" .github/pull_request_templat
 echo "  Copied PR template -> .github/"
 
 # Copy .gitshitrc (only if not already present — don't overwrite team config)
-if [ ! -f ".gitshitrc" ]; then
-  sed "s/^PROTECTED_BRANCHES=.*/PROTECTED_BRANCHES=$PROTECTED_BRANCHES/" \
+if [ ! -e ".gitshitrc" ]; then
+  sed "s|^PROTECTED_BRANCHES=.*|PROTECTED_BRANCHES=$PROTECTED_BRANCHES|" \
     "$TEMPLATE_DIR/.gitshitrc" > .gitshitrc
   echo "  Created .gitshitrc (PROTECTED_BRANCHES=$PROTECTED_BRANCHES)"
 else
