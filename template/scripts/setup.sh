@@ -35,7 +35,7 @@ fi
 
 if [ -n "$HOOKS_DIR" ]; then
   git config core.hooksPath "$HOOKS_DIR"
-  chmod +x "$HOOKS_DIR"/* 2>/dev/null
+  chmod +x "$HOOKS_DIR"/* 2>/dev/null || echo "  Warning: could not chmod some hooks"
   echo "  ✅ Hooks → $HOOKS_DIR/ (via core.hooksPath)"
 
   for hook in "$HOOKS_DIR"/*; do

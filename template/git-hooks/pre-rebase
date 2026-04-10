@@ -5,7 +5,9 @@
 
 # --- Config loader ---
 _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-[ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
+if [ -f "$_git_shit_root/.gitshitrc" ]; then
+  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
+fi
 
 TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
 
@@ -70,7 +72,9 @@ fi
 
 # The remote is ahead or equal — check if we'd rewrite pushed commits
 WOULD_REWRITE=$(git log --oneline "$UPSTREAM..$BRANCH" 2>/dev/null)
-REWRITE_COUNT=$(echo "$WOULD_REWRITE" | grep -c '^' 2>/dev/null)
+if [ -z "$WOULD_REWRITE" ]; then
+  exit 0
+fi
 
 # Check if any of those commits exist on the remote
 SHARED_COUNT=0
