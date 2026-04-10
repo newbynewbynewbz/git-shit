@@ -6,3 +6,6 @@ COMMIT_MSG_MODE=warn           # strict | warn | off
 SECRET_SCAN=on                 # on | off
 LARGE_COMMIT_THRESHOLD=200     # line count before warning
 PROTECTED_BRANCHES=main        # pipe-separated: main|develop|staging
+TEACH_MODE=on                  # on | off (educational hints in hook output)
+BRANCH_PATTERN="^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert|research)/.+"
+BRANCH_NAMING_MODE=warn        # strict | warn | off

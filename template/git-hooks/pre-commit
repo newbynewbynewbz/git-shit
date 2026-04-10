@@ -10,6 +10,7 @@ _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 SECRET_SCAN="${GIT_SHIT_SECRET_SCAN:-${SECRET_SCAN:-on}}"
 LARGE_COMMIT_THRESHOLD="${GIT_SHIT_LARGE_COMMIT_THRESHOLD:-${LARGE_COMMIT_THRESHOLD:-200}}"
+TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
 
 # --- 1. Secret scanning ---
 if [ "$SECRET_SCAN" = "on" ]; then
@@ -70,10 +71,17 @@ if [ "$SECRET_SCAN" = "on" ]; then
 
   if [ "$SECRETS_FOUND" -gt 0 ]; then
     echo ""
-    echo "  To bypass for test fixtures with fake keys:"
-    echo "    GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
-    echo ""
-    echo "  For comprehensive scanning, check out: https://github.com/gitleaks/gitleaks"
+    if [ "$TEACH_MODE" = "on" ]; then
+      echo "  To unstage the offending file:"
+      echo "    git restore --staged <file>"
+      echo ""
+      echo "  To bypass for test fixtures with fake keys:"
+      echo "    GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
+      echo ""
+      echo "  For comprehensive scanning, check out: https://github.com/gitleaks/gitleaks"
+    else
+      echo "  Bypass: GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
+    fi
     echo ""
     exit 1
   fi
@@ -89,12 +97,22 @@ if [ "$INSERTIONS" -gt "$LARGE_COMMIT_THRESHOLD" ]; then
   echo "  Staged files:"
   git diff --cached --stat | tail -1
   echo ""
-  echo "  Consider splitting into smaller atomic commits."
   echo "  Ask: 'Is this truly ONE logical change?'"
   echo ""
-  echo "  Tip: use 'git add -p' to stage changes hunk-by-hunk"
-  echo "       and split this into multiple focused commits."
-  echo ""
+  if [ "$TEACH_MODE" = "on" ]; then
+    echo "  THE THREE ZONES:"
+    echo "    Working Directory  ->  Staging Area  ->  Repository"
+    echo "    (your edits)           (your draft)      (permanent record)"
+    echo ""
+    echo "  The staging area is your draft zone. Use it:"
+    echo "    git add -p              Stage changes hunk-by-hunk"
+    echo "    git diff --cached       Review what's staged before committing"
+    echo "    git restore --staged .  Unstage everything and re-curate"
+    echo ""
+  else
+    echo "  Tip: use 'git add -p' to stage changes hunk-by-hunk"
+    echo ""
+  fi
 fi
 
 # --- 3. Non-blocking whitespace check ---

@@ -8,6 +8,7 @@ _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
 
 COMMIT_MSG_MODE="${GIT_SHIT_COMMIT_MSG:-${COMMIT_MSG_MODE:-warn}}"
+TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
 
 # Skip entirely if turned off
 if [ "$COMMIT_MSG_MODE" = "off" ]; then
@@ -38,7 +39,7 @@ if echo "$MSG" | grep -qE '^(fixup|squash)! '; then
 fi
 
 # Check for conventional commit prefix
-if echo "$MSG" | grep -qE '^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert)(\([a-zA-Z0-9_-]+\))?!?: .+'; then
+if echo "$MSG" | grep -qE '^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert|research)(\([a-zA-Z0-9_-]+\))?!?: .+'; then
   exit 0
 fi
 
@@ -54,7 +55,7 @@ echo "  Your message:  $MSG"
 echo ""
 echo "  Required format: <type>(<scope>): <description>"
 echo ""
-echo "  Types: feat fix refactor docs test chore style perf ci build revert"
+echo "  Types: feat fix refactor docs test chore style perf ci build revert research"
 echo "  Scope: optional — e.g., feat(auth): or fix(api):"
 echo ""
 echo "  Examples:"
@@ -64,6 +65,11 @@ echo "    docs: update contributing guide"
 echo ""
 
 if [ "$COMMIT_MSG_MODE" = "strict" ]; then
+  if [ "$TEACH_MODE" = "on" ]; then
+    echo "  Tip: the commit was not created. Re-run with a valid prefix:"
+    echo "    git commit -m \"feat: your description here\""
+    echo ""
+  fi
   exit 1
 fi
 
