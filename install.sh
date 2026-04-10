@@ -52,7 +52,13 @@ cp "$TEMPLATE_DIR/scripts/setup-hooks.sh" scripts/setup-hooks.sh
 chmod +x scripts/setup-hooks.sh
 cp "$TEMPLATE_DIR/scripts/git-shit-tools.sh" scripts/git-shit-tools.sh
 chmod +x scripts/git-shit-tools.sh
-echo "  Copied setup.sh, setup-hooks.sh (compat), git-shit-tools.sh -> scripts/"
+cp "$TEMPLATE_DIR/scripts/git-shit-oops.sh" scripts/git-shit-oops.sh
+chmod +x scripts/git-shit-oops.sh
+cp "$TEMPLATE_DIR/scripts/git-shit-status.sh" scripts/git-shit-status.sh
+chmod +x scripts/git-shit-status.sh
+cp "$TEMPLATE_DIR/scripts/git-shit-workflow.sh" scripts/git-shit-workflow.sh
+chmod +x scripts/git-shit-workflow.sh
+echo "  Copied scripts -> scripts/"
 
 # Copy config files
 cp "$TEMPLATE_DIR/.gitattributes" .gitattributes
@@ -85,4 +91,10 @@ echo "  2. git push"
 echo ""
 echo "Your teammates just need to run after cloning:"
 echo "  bash scripts/setup.sh"
+echo ""
+echo "Explore more:"
+echo "  bash scripts/git-shit-oops.sh       # quick fixes for common mistakes"
+echo "  bash scripts/git-shit-status.sh     # audit your git setup"
+echo "  bash scripts/git-shit-workflow.sh   # find the right branching strategy"
+echo "  bash scripts/git-shit-tools.sh      # recommended git tools"
 echo ""

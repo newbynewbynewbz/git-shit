@@ -7,6 +7,8 @@
 _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
 
+TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
+
 UPSTREAM="$1"
 BRANCH="$2"
 
@@ -49,8 +51,17 @@ if [ "$PUSHED_COMMITS" -gt 0 ]; then
     echo "  Your branch and the remote have both changed."
     echo "  Rebasing may rewrite commits others have seen."
     echo ""
-    echo "  Consider: git pull --rebase origin $BRANCH"
-    echo "  Or merge: git merge origin/$BRANCH"
+    if [ "$TEACH_MODE" = "on" ]; then
+      echo "  YOUR OPTIONS:"
+      echo "    git pull --rebase origin $BRANCH   # replay your work on top of theirs"
+      echo "    git merge origin/$BRANCH           # merge both timelines (preserves history)"
+      echo ""
+      echo "  Merge preserves both timelines. Rebase creates a cleaner line"
+      echo "  but rewrites your commit hashes — risky if others depend on them."
+    else
+      echo "  Consider: git pull --rebase origin $BRANCH"
+      echo "  Or merge: git merge origin/$BRANCH"
+    fi
     echo ""
     # Warning only — don't block (user may know what they're doing)
   fi
@@ -77,11 +88,23 @@ if [ "$SHARED_COUNT" -gt 0 ]; then
   echo "  Rebasing pushed commits rewrites shared history."
   echo "  This forces teammates to deal with diverged branches."
   echo ""
-  echo "  Instead:"
-  echo "    git merge $UPSTREAM          # merge instead of rebase"
-  echo "    git pull --no-rebase         # pull with merge"
+  if [ "$TEACH_MODE" = "on" ]; then
+    echo "  THE DECISION:"
+    echo "    Pushed AND others use this branch?"
+    echo "      -> git merge $UPSTREAM           (preserves shared history)"
+    echo "    Pushed but only YOU use this branch?"
+    echo "      -> git push --force-with-lease   (safer than --force)"
+    echo "    Not pushed?"
+    echo "      -> This hook wouldn't have blocked you."
+    echo ""
+    echo "  Golden Rule: Never rebase commits others have based work on."
+  else
+    echo "  Instead:"
+    echo "    git merge $UPSTREAM          # merge instead of rebase"
+    echo "    git pull --no-rebase         # pull with merge"
+  fi
   echo ""
-  echo "  If you're sure (solo branch, force-push planned):"
+  echo "  Bypass (solo branch, force-push planned):"
   echo "    git rebase $UPSTREAM --no-verify"
   echo ""
   exit 1

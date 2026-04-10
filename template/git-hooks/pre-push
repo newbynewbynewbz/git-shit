@@ -8,20 +8,74 @@ _git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -f "$_git_shit_root/.gitshitrc" ] && . "$_git_shit_root/.gitshitrc"
 
 PROTECTED_BRANCHES="${GIT_SHIT_PROTECTED_BRANCHES:-${PROTECTED_BRANCHES:-main}}"
+TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
+BRANCH_PATTERN="${GIT_SHIT_BRANCH_PATTERN:-${BRANCH_PATTERN:-}}"
+BRANCH_NAMING_MODE="${GIT_SHIT_BRANCH_NAMING_MODE:-${BRANCH_NAMING_MODE:-warn}}"
+
+# --- Branch naming check ---
+if [ "$BRANCH_NAMING_MODE" != "off" ] && [ -n "$BRANCH_PATTERN" ]; then
+  CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+  if [ -n "$CURRENT_BRANCH" ]; then
+    # Skip check for protected branches (main, develop, etc.)
+    IS_PROTECTED=false
+    IFS='|' read -ra _PROT_LIST <<< "$PROTECTED_BRANCHES"
+    for _pb in "${_PROT_LIST[@]}"; do
+      if [ "$CURRENT_BRANCH" = "$_pb" ]; then
+        IS_PROTECTED=true
+        break
+      fi
+    done
+
+    if [ "$IS_PROTECTED" = "false" ] && ! [[ "$CURRENT_BRANCH" =~ $BRANCH_PATTERN ]]; then
+      echo ""
+      if [ "$BRANCH_NAMING_MODE" = "strict" ]; then
+        echo "🛑 Branch name rejected: $CURRENT_BRANCH"
+      else
+        echo "💡 Branch naming suggestion for: $CURRENT_BRANCH"
+      fi
+      echo ""
+      echo "  Expected pattern: <type>/<description>"
+      echo "  Types: feat fix refactor docs test chore style perf ci build revert research"
+      echo ""
+      echo "  Examples:"
+      echo "    feat/add-login"
+      echo "    fix/null-pointer-crash"
+      echo "    docs/update-readme"
+      echo ""
+      if [ "$BRANCH_NAMING_MODE" = "strict" ]; then
+        echo "  Rename your branch:"
+        echo "    git branch -m $CURRENT_BRANCH feat/your-description"
+        echo ""
+        exit 1
+      fi
+    fi
+  fi
+fi
 
 while read local_ref local_sha remote_ref remote_sha; do
   IFS='|' read -ra BRANCHES <<< "$PROTECTED_BRANCHES"
   for PROTECTED in "${BRANCHES[@]}"; do
     if [ "$remote_ref" = "refs/heads/$PROTECTED" ]; then
+      # Allow initial push to create the remote branch
+      if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+        continue
+      fi
       echo ""
       echo "🛑 Direct push to $PROTECTED blocked"
       echo ""
       echo "  Use the PR workflow instead:"
-      echo "    1. git checkout -b feature/my-change"
-      echo "    2. git push -u origin feature/my-change"
+      echo "    1. git checkout -b feat/my-change"
+      echo "    2. git push -u origin feat/my-change"
       echo "    3. gh pr create --fill"
       echo "    4. gh pr merge --squash --delete-branch"
       echo ""
+      if [ "$TEACH_MODE" = "on" ]; then
+        echo "  Already committed to $PROTECTED by accident?"
+        echo "    git reset --soft HEAD~     # undo commit, keep changes staged"
+        echo "    git checkout -b feat/x     # move to a new branch"
+        echo "    git push -u origin feat/x"
+        echo ""
+      fi
       echo "  Emergency bypass: git push --no-verify"
       echo ""
       exit 1

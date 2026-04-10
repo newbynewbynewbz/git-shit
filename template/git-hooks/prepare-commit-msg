@@ -23,6 +23,22 @@ TYPE=$(echo "$BRANCH" | sed -n 's|^\(feat\|fix\|refactor\|docs\|test\|chore\|sty
 # Extract scope from branch name: feat/auth/add-login -> feat(auth)
 SCOPE=$(echo "$BRANCH" | sed -n 's|^\(feat\|fix\|refactor\|docs\|test\|chore\|style\|perf\|ci\|build\|revert\)/\([a-zA-Z0-9_-]*\)/.*|\2|p')
 
+TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
+
+# Hint if branch name doesn't follow convention (only when TEACH_MODE is on)
+if [ -z "$TYPE" ] && [ -n "$BRANCH" ] && [ "$TEACH_MODE" = "on" ]; then
+  # Don't warn for protected branches or detached HEAD
+  case "$BRANCH" in
+    main|master|develop|staging|production) ;;
+    *)
+      echo "" >&2
+      echo "💡 Tip: Name branches as <type>/<description> for auto-prefill" >&2
+      echo "   Example: feat/add-login, fix/null-check" >&2
+      echo "" >&2
+      ;;
+  esac
+fi
+
 # Only pre-fill if the first line is empty (not already filled by template or -m)
 FIRST_LINE=$(head -1 "$COMMIT_MSG_FILE")
 if [ -n "$TYPE" ] && [ -z "$FIRST_LINE" ]; then
