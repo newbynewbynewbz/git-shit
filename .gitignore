@@ -1,5 +1,6 @@
 .DS_Store
 *.log
+.claude/settings.local.json
 
 # Self-install artifacts — if someone accidentally runs `bash install.sh`
 # from the git-shit source repo, these files get written at the root.
