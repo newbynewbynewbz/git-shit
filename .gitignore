@@ -1,2 +1,11 @@
 .DS_Store
 *.log
+
+# Self-install artifacts — if someone accidentally runs `bash install.sh`
+# from the git-shit source repo, these files get written at the root.
+# They're byproducts, not source — ignore them so they don't clutter git status.
+/.gitshitrc
+/.gitattributes
+/.gitmessage
+/.github/
+/scripts/
