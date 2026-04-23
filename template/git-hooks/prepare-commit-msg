@@ -1,35 +1,32 @@
 #!/bin/bash
 # Git Shit: prepare-commit-msg hook
-# Pre-fills conventional commit prefix from branch name
-# Fires before the editor opens — shows correct format before you type
+# Pre-fills conventional commit prefix from branch name.
+# No-op when COMMIT_MSG_MODE=off (solo profile default).
 
-# --- Config loader ---
-_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -f "$_git_shit_root/.gitshitrc" ]; then
-  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
-fi
+# --- Config + libs ---
+_gs_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_gs_root/.gitshitrc" ] && bash -n "$_gs_root/.gitshitrc" 2>/dev/null && . "$_gs_root/.gitshitrc"
+for _d in "$_gs_root/scripts/lib" "$_gs_root/lib"; do
+  [ -f "$_d/profile.sh" ] && . "$_d/profile.sh"
+done
+
+COMMIT_MSG_MODE="${GIT_SHIT_COMMIT_MSG:-${COMMIT_MSG_MODE:-off}}"
+# If conventional commits aren't enforced, don't auto-prefill either.
+[ "$COMMIT_MSG_MODE" = "off" ] && exit 0
 
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="$2"
 
 # Only auto-fill for new commits (not merges, amends, squashes, etc.)
-if [ -n "$COMMIT_SOURCE" ]; then
-  exit 0
-fi
+[ -n "$COMMIT_SOURCE" ] && exit 0
 
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 
-# Extract type from branch name: feat/add-login -> feat
 TYPE=$(echo "$BRANCH" | sed -n 's|^\(feat\|fix\|refactor\|docs\|test\|chore\|style\|perf\|ci\|build\|revert\)/.*|\1|p')
-
-# Extract scope from branch name: feat/auth/add-login -> feat(auth)
 SCOPE=$(echo "$BRANCH" | sed -n 's|^\(feat\|fix\|refactor\|docs\|test\|chore\|style\|perf\|ci\|build\|revert\)/\([a-zA-Z0-9_-]*\)/.*|\2|p')
 
-TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
-
 # Hint if branch name doesn't follow convention (only when TEACH_MODE is on)
-if [ -z "$TYPE" ] && [ -n "$BRANCH" ] && [ "$TEACH_MODE" = "on" ]; then
-  # Don't warn for protected branches
+if [ -z "$TYPE" ] && [ -n "$BRANCH" ] && [ "${TEACH_MODE:-off}" = "on" ]; then
   _IS_PROTECTED=false
   IFS='|' read -ra _PROT_LIST <<< "${PROTECTED_BRANCHES:-main}"
   for _pb in "${_PROT_LIST[@]}"; do
@@ -43,7 +40,7 @@ if [ -z "$TYPE" ] && [ -n "$BRANCH" ] && [ "$TEACH_MODE" = "on" ]; then
   fi
 fi
 
-# Only pre-fill if the first line is empty (not already filled by template or -m)
+# Pre-fill only if the first line is empty
 FIRST_LINE=$(head -1 "$COMMIT_MSG_FILE")
 if [ -n "$TYPE" ] && [ -z "$FIRST_LINE" ]; then
   if [ -n "$SCOPE" ]; then
@@ -51,11 +48,9 @@ if [ -n "$TYPE" ] && [ -z "$FIRST_LINE" ]; then
   else
     PREFIX="$TYPE: "
   fi
-  # Prepend prefix to the commit message file
   TEMP=$(mktemp) || exit 0
   trap 'rm -f "$TEMP"' EXIT
   echo "$PREFIX" > "$TEMP"
-  # Append original content (template comments, etc.)
   tail -n +2 "$COMMIT_MSG_FILE" >> "$TEMP"
   mv "$TEMP" "$COMMIT_MSG_FILE"
   trap - EXIT

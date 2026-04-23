@@ -1,11 +1,16 @@
 # .gitshitrc — git-shit configuration
-# Team defaults. Individual devs can override with env vars (GIT_SHIT_<KEY>).
-# This file should be committed to your repo.
+# Committed to your repo. Teammates pick it up automatically.
+# Individual devs can override any key via env var: GIT_SHIT_<KEY>=value git commit ...
 
-COMMIT_MSG_MODE=warn           # strict | warn | off
-SECRET_SCAN=on                 # on | off
-LARGE_COMMIT_THRESHOLD=200     # line count before warning
-PROTECTED_BRANCHES=main        # pipe-separated: main|develop|staging
-TEACH_MODE=on                  # on | off (educational hints in hook output)
-BRANCH_PATTERN="^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert|research)/.+"
-BRANCH_NAMING_MODE=warn        # strict | warn | off
+# Profile sets defaults for everything below. Any key you set explicitly overrides it.
+# Options: solo (quiet, velocity) | team (conventional commits, branch naming) | strict (everything enforced)
+GIT_SHIT_PROFILE=solo
+
+# Uncomment to override profile defaults:
+# TEACH_MODE=off                  # on | off — educational hints in hook output
+# COMMIT_MSG_MODE=off             # strict | warn | off — conventional commit enforcement
+# BRANCH_NAMING_MODE=off          # strict | warn | off — <type>/<desc> branch names
+# LARGE_COMMIT_THRESHOLD=500      # insertions before a size warning
+# SECRET_SCAN=on                  # on | off — pre-commit secret regex scan (keep on)
+# PROTECTED_BRANCHES=main         # pipe-separated: main|develop|staging
+# BRANCH_PATTERN="^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert|research)/.+"
