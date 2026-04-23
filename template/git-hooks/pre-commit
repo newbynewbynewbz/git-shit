@@ -4,19 +4,24 @@
 # 2. Large commit warning (non-blocking)
 # 3. Whitespace check (non-blocking)
 
-# --- Config loader ---
-_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -f "$_git_shit_root/.gitshitrc" ]; then
-  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
-fi
+# --- Config + libs ---
+_gs_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_gs_root/.gitshitrc" ] && bash -n "$_gs_root/.gitshitrc" 2>/dev/null && . "$_gs_root/.gitshitrc"
+for _d in "$_gs_root/scripts/lib" "$_gs_root/lib"; do
+  [ -f "$_d/profile.sh" ] && . "$_d/profile.sh"
+  [ -f "$_d/output.sh" ] && . "$_d/output.sh"
+done
+type gs_teach >/dev/null 2>&1 || gs_teach() { [ "${TEACH_MODE:-off}" = "on" ] && printf '%s\n' "$@"; }
+type gs_err   >/dev/null 2>&1 || gs_err()   { printf '%s\n' "$@" >&2; }
+type gs_fail  >/dev/null 2>&1 || gs_fail()  { gs_err "$@"; exit 1; }
 
 SECRET_SCAN="${GIT_SHIT_SECRET_SCAN:-${SECRET_SCAN:-on}}"
-LARGE_COMMIT_THRESHOLD="${GIT_SHIT_LARGE_COMMIT_THRESHOLD:-${LARGE_COMMIT_THRESHOLD:-200}}"
-TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
+LARGE_COMMIT_THRESHOLD="${GIT_SHIT_LARGE_COMMIT_THRESHOLD:-${LARGE_COMMIT_THRESHOLD:-500}}"
 
 # --- 1. Secret scanning ---
 if [ "$SECRET_SCAN" = "on" ]; then
   SECRETS_FOUND=0
+  SECRET_OUTPUT=""
 
   # Check staged filenames (basename only)
   while IFS= read -r file; do
@@ -29,62 +34,80 @@ if [ "$SECRET_SCAN" = "on" ]; then
       *) continue ;;
     esac
     if [ "$SECRETS_FOUND" -eq 0 ]; then
-      echo ""
-      echo "🛑 Possible secrets detected in staged files:"
-      echo ""
+      SECRET_OUTPUT+=$'\n🛑 Possible secrets detected in staged files:\n\n'
     fi
-    echo "  File: $file"
+    SECRET_OUTPUT+="  File: $file"$'\n'
     SECRETS_FOUND=$((SECRETS_FOUND + 1))
   done < <(git diff --cached --name-only --diff-filter=ACM)
 
-  # Scan staged file contents for secret patterns
+  # Scan staged file contents for secret patterns.
+  # Specific patterns before generic so error messages name the provider.
   PATTERNS=(
+    'sk-ant-api03-[A-Za-z0-9_\-]{93}AA'
+    'sk-ant-admin01-[A-Za-z0-9_\-]{93}AA'
+    'sk-proj-[A-Za-z0-9_\-]{40,}'
+    'github_pat_[A-Za-z0-9_]{82}'
+    'ghp_[a-zA-Z0-9]{36}'
     'AKIA[0-9A-Z]{16}'
+    'sb_secret_[A-Za-z0-9_]{20,}'
+    'vercel_[A-Za-z0-9]{24}'
+    'dapi[a-f0-9]{32}'
+    'doo_v1_[a-f0-9]{64}'
+    'dop_v1_[a-f0-9]{64}'
+    'fo1_[A-Za-z0-9_\-]{40,}'
     '-----BEGIN.*PRIVATE KEY-----'
     'sk-[a-zA-Z0-9]{20,}'
-    'ghp_[a-zA-Z0-9]{36}'
   )
   PATTERN_NAMES=(
-    "AWS access key"
-    "Private key"
-    "API secret key (sk-...)"
+    "Anthropic API key"
+    "Anthropic admin key"
+    "OpenAI project key"
+    "GitHub fine-grained PAT"
     "GitHub personal access token"
+    "AWS access key"
+    "Supabase service key"
+    "Vercel token"
+    "Databricks PAT"
+    "DigitalOcean OAuth token"
+    "DigitalOcean PAT"
+    "Fly.io token"
+    "Private key (PEM)"
+    "Generic API secret key"
   )
 
   for i in "${!PATTERNS[@]}"; do
     MATCHES=$(git diff --cached -U0 --diff-filter=ACM 2>/dev/null | grep -nE "^\+" | grep -E "${PATTERNS[$i]}" 2>/dev/null)
     if [ -n "$MATCHES" ]; then
       if [ "$SECRETS_FOUND" -eq 0 ]; then
-        echo ""
-        echo "🛑 Possible secrets detected in staged files:"
-        echo ""
+        SECRET_OUTPUT+=$'\n🛑 Possible secrets detected in staged files:\n\n'
       fi
-      echo "  Pattern: ${PATTERN_NAMES[$i]}"
-      echo "$MATCHES" | head -3 | while read -r line; do
-        echo "    $line"
-      done
+      SECRET_OUTPUT+="  Pattern: ${PATTERN_NAMES[$i]}"$'\n'
+      while IFS= read -r line; do
+        SECRET_OUTPUT+="    $line"$'\n'
+      done < <(echo "$MATCHES" | head -3)
       MATCH_COUNT=$(echo "$MATCHES" | wc -l | tr -d ' ')
       if [ "$MATCH_COUNT" -gt 3 ]; then
-        echo "    ... and $((MATCH_COUNT - 3)) more"
+        SECRET_OUTPUT+="    ... and $((MATCH_COUNT - 3)) more"$'\n'
       fi
       SECRETS_FOUND=$((SECRETS_FOUND + 1))
     fi
   done
 
   if [ "$SECRETS_FOUND" -gt 0 ]; then
-    echo ""
-    if [ "$TEACH_MODE" = "on" ]; then
-      echo "  To unstage the offending file:"
-      echo "    git restore --staged <file>"
-      echo ""
-      echo "  To bypass for test fixtures with fake keys:"
-      echo "    GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
-      echo ""
-      echo "  For comprehensive scanning, check out: https://github.com/gitleaks/gitleaks"
+    printf '%s' "$SECRET_OUTPUT" >&2
+    echo "" >&2
+    if [ "${TEACH_MODE:-off}" = "on" ]; then
+      gs_err "  To unstage the offending file:"
+      gs_err "    git restore --staged <file>"
+      gs_err ""
+      gs_err "  To bypass for test fixtures with fake keys:"
+      gs_err "    GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
+      gs_err ""
+      gs_err "  For comprehensive scanning: https://github.com/gitleaks/gitleaks"
     else
-      echo "  Bypass: GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
+      gs_err "  Bypass: GIT_SHIT_SECRET_SCAN=off git commit -m \"your message\""
     fi
-    echo ""
+    echo "" >&2
     exit 1
   fi
 fi
@@ -94,14 +117,14 @@ INSERTIONS=$(git diff --cached --numstat | awk '{sum+=$1} END{print sum+0}')
 
 if [ "$INSERTIONS" -gt "$LARGE_COMMIT_THRESHOLD" ]; then
   echo ""
-  echo "⚠️  Commit size warning: $INSERTIONS insertions (threshold: $LARGE_COMMIT_THRESHOLD)"
-  echo ""
-  echo "  Staged files:"
-  git diff --cached --stat | tail -1
-  echo ""
-  echo "  Ask: 'Is this truly ONE logical change?'"
-  echo ""
-  if [ "$TEACH_MODE" = "on" ]; then
+  echo "⚠️  Commit size: $INSERTIONS insertions (threshold: $LARGE_COMMIT_THRESHOLD)"
+  if [ "${TEACH_MODE:-off}" = "on" ]; then
+    echo ""
+    echo "  Staged files:"
+    git diff --cached --stat | tail -1
+    echo ""
+    echo "  Ask: 'Is this truly ONE logical change?'"
+    echo ""
     echo "  THE THREE ZONES:"
     echo "    Working Directory  ->  Staging Area  ->  Repository"
     echo "    (your edits)           (your draft)      (permanent record)"
@@ -111,17 +134,13 @@ if [ "$INSERTIONS" -gt "$LARGE_COMMIT_THRESHOLD" ]; then
     echo "    git diff --cached       Review what's staged before committing"
     echo "    git restore --staged .  Unstage everything and re-curate"
     echo ""
-  else
-    echo "  Tip: use 'git add -p' to stage changes hunk-by-hunk"
-    echo ""
   fi
 fi
 
 # --- 3. Non-blocking whitespace check ---
-if ! git diff --cached --check > /dev/null 2>&1; then
-  echo "⚠️  Whitespace issues detected (trailing spaces, mixed tabs)"
-  echo "  Run: git diff --cached --check    to see details"
-  echo ""
+# Silent unless teach mode is on — whitespace is a nit, not a blocker.
+if [ "${TEACH_MODE:-off}" = "on" ] && ! git diff --cached --check > /dev/null 2>&1; then
+  echo "⚠️  Whitespace issues (trailing spaces, mixed tabs). See: git diff --cached --check"
 fi
 
 exit 0

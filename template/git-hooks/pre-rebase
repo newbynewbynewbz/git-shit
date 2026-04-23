@@ -1,82 +1,57 @@
 #!/bin/bash
 # Git Shit: pre-rebase hook
-# Prevents rebasing commits that have already been pushed to a remote
-# Protects shared history from accidental rewriting
+# Prevents rebasing commits that have already been pushed to a remote.
+# Protects shared history from accidental rewriting.
 
-# --- Config loader ---
-_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -f "$_git_shit_root/.gitshitrc" ]; then
-  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
-fi
-
-TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
+# --- Config + libs ---
+_gs_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_gs_root/.gitshitrc" ] && bash -n "$_gs_root/.gitshitrc" 2>/dev/null && . "$_gs_root/.gitshitrc"
+for _d in "$_gs_root/scripts/lib" "$_gs_root/lib"; do
+  [ -f "$_d/profile.sh" ] && . "$_d/profile.sh"
+  [ -f "$_d/output.sh" ] && . "$_d/output.sh"
+done
+type gs_teach >/dev/null 2>&1 || gs_teach() { [ "${TEACH_MODE:-off}" = "on" ] && printf '%s\n' "$@"; }
 
 UPSTREAM="$1"
 BRANCH="$2"
 
-# If no branch specified, we're rebasing the current branch
-if [ -z "$BRANCH" ]; then
-  BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
-fi
+# Default to current branch if not specified
+[ -z "$BRANCH" ] && BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+# Skip if detached HEAD
+[ -z "$BRANCH" ] && exit 0
 
-# Skip if we can't determine the branch (detached HEAD)
-if [ -z "$BRANCH" ]; then
-  exit 0
-fi
-
-# Check if this branch has a remote tracking branch
+# Skip if no remote tracking (local-only branch is always safe to rebase)
 REMOTE_REF=$(git rev-parse --verify "origin/$BRANCH" 2>/dev/null)
-if [ -z "$REMOTE_REF" ]; then
-  # No remote tracking — local only, safe to rebase
-  exit 0
-fi
+[ -z "$REMOTE_REF" ] && exit 0
 
-# Check if the local branch has commits that exist on the remote
-# If local and remote point to the same commit, rebasing is fine
-# (we're rebasing on top of remote changes)
 LOCAL_REF=$(git rev-parse "$BRANCH" 2>/dev/null)
-if [ "$LOCAL_REF" = "$REMOTE_REF" ]; then
-  exit 0
-fi
+[ "$LOCAL_REF" = "$REMOTE_REF" ] && exit 0
 
-# Check if there are commits on the remote that would be rewritten
+# Local has unpushed commits — check if remote also diverged
 PUSHED_COMMITS=$(git log --oneline "origin/$BRANCH..$BRANCH" 2>/dev/null | wc -l | tr -d ' ')
 
 if [ "$PUSHED_COMMITS" -gt 0 ]; then
-  # The local branch is ahead — those unpushed commits are safe to rebase
-  # But check if the remote has diverged (someone else pushed)
   REMOTE_ONLY=$(git log --oneline "$BRANCH..origin/$BRANCH" 2>/dev/null | wc -l | tr -d ' ')
   if [ "$REMOTE_ONLY" -gt 0 ]; then
     echo ""
     echo "⚠️  Rebase warning: origin/$BRANCH has diverged"
-    echo ""
-    echo "  Your branch and the remote have both changed."
-    echo "  Rebasing may rewrite commits others have seen."
-    echo ""
-    if [ "$TEACH_MODE" = "on" ]; then
-      echo "  YOUR OPTIONS:"
-      echo "    git pull --rebase origin $BRANCH   # replay your work on top of theirs"
-      echo "    git merge origin/$BRANCH           # merge both timelines (preserves history)"
-      echo ""
-      echo "  Merge preserves both timelines. Rebase creates a cleaner line"
-      echo "  but rewrites your commit hashes — risky if others depend on them."
-    else
-      echo "  Consider: git pull --rebase origin $BRANCH"
-      echo "  Or merge: git merge origin/$BRANCH"
-    fi
-    echo ""
-    # Warning only — don't block (user may know what they're doing)
+    gs_teach "" \
+             "  Your branch and the remote have both changed." \
+             "  Rebasing may rewrite commits others have seen." \
+             "" \
+             "  YOUR OPTIONS:" \
+             "    git pull --rebase origin $BRANCH   # replay your work on top of theirs" \
+             "    git merge origin/$BRANCH           # merge both timelines (preserves history)" \
+             ""
+    # Warning only — don't block
   fi
   exit 0
 fi
 
-# The remote is ahead or equal — check if we'd rewrite pushed commits
+# Check if any commits to rewrite exist on the remote
 WOULD_REWRITE=$(git log --oneline "$UPSTREAM..$BRANCH" 2>/dev/null)
-if [ -z "$WOULD_REWRITE" ]; then
-  exit 0
-fi
+[ -z "$WOULD_REWRITE" ] && exit 0
 
-# Check if any of those commits exist on the remote
 SHARED_COUNT=0
 while IFS= read -r line; do
   SHA=$(echo "$line" | awk '{print $1}')
@@ -90,24 +65,15 @@ if [ "$SHARED_COUNT" -gt 0 ]; then
   echo "🛑 Rebase blocked — $SHARED_COUNT commit(s) already pushed to origin/$BRANCH"
   echo ""
   echo "  Rebasing pushed commits rewrites shared history."
-  echo "  This forces teammates to deal with diverged branches."
   echo ""
-  if [ "$TEACH_MODE" = "on" ]; then
-    echo "  THE DECISION:"
-    echo "    Pushed AND others use this branch?"
-    echo "      -> git merge $UPSTREAM           (preserves shared history)"
-    echo "    Pushed but only YOU use this branch?"
-    echo "      -> git push --force-with-lease   (safer than --force)"
-    echo "    Not pushed?"
-    echo "      -> This hook wouldn't have blocked you."
-    echo ""
-    echo "  Golden Rule: Never rebase commits others have based work on."
-  else
-    echo "  Instead:"
-    echo "    git merge $UPSTREAM          # merge instead of rebase"
-    echo "    git pull --no-rebase         # pull with merge"
-  fi
-  echo ""
+  gs_teach "  THE DECISION:" \
+           "    Pushed AND others use this branch?" \
+           "      -> git merge $UPSTREAM           (preserves shared history)" \
+           "    Pushed but only YOU use this branch?" \
+           "      -> git push --force-with-lease   (safer than --force)" \
+           "" \
+           "  Golden Rule: Never rebase commits others have based work on." \
+           ""
   echo "  Bypass (solo branch, force-push planned):"
   echo "    git rebase $UPSTREAM --no-verify"
   echo ""

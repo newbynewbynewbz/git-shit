@@ -2,43 +2,26 @@
 # Git Shit: post-merge hook
 # Reminds you to install dependencies when lock files change after pull/merge
 
-# --- Config loader ---
-_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -f "$_git_shit_root/.gitshitrc" ]; then
-  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
-fi
+# --- Config + libs ---
+_gs_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_gs_root/.gitshitrc" ] && bash -n "$_gs_root/.gitshitrc" 2>/dev/null && . "$_gs_root/.gitshitrc"
+for _d in "$_gs_root/scripts/lib" "$_gs_root/lib"; do
+  [ -f "$_d/profile.sh" ] && . "$_d/profile.sh"
+done
 
 CHANGED=$(git diff-tree -r --name-only ORIG_HEAD HEAD 2>/dev/null)
-
-if [ -z "$CHANGED" ]; then
-  exit 0
-fi
+[ -z "$CHANGED" ] && exit 0
 
 NEEDS_INSTALL=""
-
-# Check each package manager's lock file
-if echo "$CHANGED" | grep -q "package-lock.json"; then
-  NEEDS_INSTALL="npm install"
-elif echo "$CHANGED" | grep -q "yarn.lock"; then
-  NEEDS_INSTALL="yarn install"
-elif echo "$CHANGED" | grep -q "pnpm-lock.yaml"; then
-  NEEDS_INSTALL="pnpm install"
-elif echo "$CHANGED" | grep -q "bun.lockb"; then
-  NEEDS_INSTALL="bun install"
-elif echo "$CHANGED" | grep -q "Cargo.lock"; then
-  NEEDS_INSTALL="cargo build"
-elif echo "$CHANGED" | grep -q "requirements.txt\|Pipfile.lock\|poetry.lock\|uv.lock"; then
-  NEEDS_INSTALL="pip install -r requirements.txt"
-elif echo "$CHANGED" | grep -q "go.sum"; then
-  NEEDS_INSTALL="go mod download"
-elif echo "$CHANGED" | grep -q "Gemfile.lock"; then
-  NEEDS_INSTALL="bundle install"
+if   echo "$CHANGED" | grep -q "package-lock.json"; then NEEDS_INSTALL="npm install"
+elif echo "$CHANGED" | grep -q "yarn.lock";         then NEEDS_INSTALL="yarn install"
+elif echo "$CHANGED" | grep -q "pnpm-lock.yaml";    then NEEDS_INSTALL="pnpm install"
+elif echo "$CHANGED" | grep -q "bun.lockb";         then NEEDS_INSTALL="bun install"
+elif echo "$CHANGED" | grep -q "Cargo.lock";        then NEEDS_INSTALL="cargo build"
+elif echo "$CHANGED" | grep -qE "requirements.txt|Pipfile.lock|poetry.lock|uv.lock"; then NEEDS_INSTALL="pip install -r requirements.txt"
+elif echo "$CHANGED" | grep -q "go.sum";            then NEEDS_INSTALL="go mod download"
+elif echo "$CHANGED" | grep -q "Gemfile.lock";      then NEEDS_INSTALL="bundle install"
 fi
 
-if [ -n "$NEEDS_INSTALL" ]; then
-  echo ""
-  echo "📦 Dependencies changed — run: $NEEDS_INSTALL"
-  echo ""
-fi
-
+[ -n "$NEEDS_INSTALL" ] && echo "📦 Dependencies changed — run: $NEEDS_INSTALL"
 exit 0

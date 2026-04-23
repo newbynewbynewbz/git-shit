@@ -3,29 +3,27 @@
 # Blocks direct pushes to protected branches — forces PR workflow
 # Bypass: git push --no-verify (emergencies only)
 
-# --- Config loader ---
-_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -f "$_git_shit_root/.gitshitrc" ]; then
-  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
-fi
+# --- Config + libs ---
+_gs_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_gs_root/.gitshitrc" ] && bash -n "$_gs_root/.gitshitrc" 2>/dev/null && . "$_gs_root/.gitshitrc"
+for _d in "$_gs_root/scripts/lib" "$_gs_root/lib"; do
+  [ -f "$_d/profile.sh" ] && . "$_d/profile.sh"
+  [ -f "$_d/output.sh" ] && . "$_d/output.sh"
+done
+type gs_teach >/dev/null 2>&1 || gs_teach() { [ "${TEACH_MODE:-off}" = "on" ] && printf '%s\n' "$@"; }
 
 PROTECTED_BRANCHES="${GIT_SHIT_PROTECTED_BRANCHES:-${PROTECTED_BRANCHES:-main}}"
-TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
 BRANCH_PATTERN="${GIT_SHIT_BRANCH_PATTERN:-${BRANCH_PATTERN:-}}"
-BRANCH_NAMING_MODE="${GIT_SHIT_BRANCH_NAMING_MODE:-${BRANCH_NAMING_MODE:-warn}}"
+BRANCH_NAMING_MODE="${GIT_SHIT_BRANCH_NAMING_MODE:-${BRANCH_NAMING_MODE:-off}}"
 
 # --- Branch naming check ---
 if [ "$BRANCH_NAMING_MODE" != "off" ] && [ -n "$BRANCH_PATTERN" ]; then
   CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
   if [ -n "$CURRENT_BRANCH" ]; then
-    # Skip check for protected branches (main, develop, etc.)
     IS_PROTECTED=false
     IFS='|' read -ra _PROT_LIST <<< "$PROTECTED_BRANCHES"
     for _pb in "${_PROT_LIST[@]}"; do
-      if [ "$CURRENT_BRANCH" = "$_pb" ]; then
-        IS_PROTECTED=true
-        break
-      fi
+      [ "$CURRENT_BRANCH" = "$_pb" ] && IS_PROTECTED=true && break
     done
 
     if [ "$IS_PROTECTED" = "false" ] && ! [[ "$CURRENT_BRANCH" =~ $BRANCH_PATTERN ]]; then
@@ -36,14 +34,14 @@ if [ "$BRANCH_NAMING_MODE" != "off" ] && [ -n "$BRANCH_PATTERN" ]; then
         echo "💡 Branch naming suggestion for: $CURRENT_BRANCH"
       fi
       echo ""
-      echo "  Expected pattern: <type>/<description>"
-      echo "  Types: feat fix refactor docs test chore style perf ci build revert research"
-      echo ""
-      echo "  Examples:"
-      echo "    feat/add-login"
-      echo "    fix/null-pointer-crash"
-      echo "    docs/update-readme"
-      echo ""
+      gs_teach "  Expected pattern: <type>/<description>" \
+               "  Types: feat fix refactor docs test chore style perf ci build revert research" \
+               "" \
+               "  Examples:" \
+               "    feat/add-login" \
+               "    fix/null-pointer-crash" \
+               "    docs/update-readme" \
+               ""
       if [ "$BRANCH_NAMING_MODE" = "strict" ]; then
         echo "  Rename your branch:"
         echo "    git branch -m $CURRENT_BRANCH feat/your-description"
@@ -54,14 +52,12 @@ if [ "$BRANCH_NAMING_MODE" != "off" ] && [ -n "$BRANCH_PATTERN" ]; then
   fi
 fi
 
-while read local_ref local_sha remote_ref remote_sha; do
+while read -r local_ref local_sha remote_ref remote_sha; do
   IFS='|' read -ra BRANCHES <<< "$PROTECTED_BRANCHES"
   for PROTECTED in "${BRANCHES[@]}"; do
     if [ "$remote_ref" = "refs/heads/$PROTECTED" ]; then
       # Allow initial push to create the remote branch
-      if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-        continue
-      fi
+      [ "$remote_sha" = "0000000000000000000000000000000000000000" ] && continue
       echo ""
       echo "🛑 Direct push to $PROTECTED blocked"
       echo ""
@@ -71,13 +67,11 @@ while read local_ref local_sha remote_ref remote_sha; do
       echo "    3. gh pr create --fill"
       echo "    4. gh pr merge --squash --delete-branch"
       echo ""
-      if [ "$TEACH_MODE" = "on" ]; then
-        echo "  Already committed to $PROTECTED by accident?"
-        echo "    git reset --soft HEAD~     # undo commit, keep changes staged"
-        echo "    git checkout -b feat/x     # move to a new branch"
-        echo "    git push -u origin feat/x"
-        echo ""
-      fi
+      gs_teach "  Already committed to $PROTECTED by accident?" \
+               "    git reset --soft HEAD~     # undo commit, keep changes staged" \
+               "    git checkout -b feat/x     # move to a new branch" \
+               "    git push -u origin feat/x" \
+               ""
       echo "  Emergency bypass: git push --no-verify"
       echo ""
       exit 1

@@ -3,49 +3,36 @@
 # Enforces conventional commit prefixes
 # Modes: strict (block) | warn (suggest) | off (skip)
 
-# --- Config loader ---
-_git_shit_root="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -f "$_git_shit_root/.gitshitrc" ]; then
-  bash -n "$_git_shit_root/.gitshitrc" 2>/dev/null && . "$_git_shit_root/.gitshitrc"
-fi
+# --- Config + libs ---
+_gs_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -f "$_gs_root/.gitshitrc" ] && bash -n "$_gs_root/.gitshitrc" 2>/dev/null && . "$_gs_root/.gitshitrc"
+for _d in "$_gs_root/scripts/lib" "$_gs_root/lib"; do
+  [ -f "$_d/profile.sh" ] && . "$_d/profile.sh"
+  [ -f "$_d/output.sh" ] && . "$_d/output.sh"
+done
+type gs_teach >/dev/null 2>&1 || gs_teach() { [ "${TEACH_MODE:-off}" = "on" ] && printf '%s\n' "$@"; }
 
-COMMIT_MSG_MODE="${GIT_SHIT_COMMIT_MSG:-${COMMIT_MSG_MODE:-warn}}"
-TEACH_MODE="${GIT_SHIT_TEACH_MODE:-${TEACH_MODE:-on}}"
+COMMIT_MSG_MODE="${GIT_SHIT_COMMIT_MSG:-${COMMIT_MSG_MODE:-off}}"
 
 # Skip entirely if turned off
-if [ "$COMMIT_MSG_MODE" = "off" ]; then
-  exit 0
-fi
+[ "$COMMIT_MSG_MODE" = "off" ] && exit 0
 
 MSG_FILE="$1"
-
-if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
-  exit 0
-fi
+[ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ] && exit 0
 
 MSG=$(head -1 "$MSG_FILE")
 
-# Allow merge commits
-if echo "$MSG" | grep -qE '^Merge '; then
-  exit 0
-fi
-
-# Allow squash merge commits from GitHub
-if echo "$MSG" | grep -qE '^\S+.*\(#[0-9]+\)$'; then
-  exit 0
-fi
-
-# Allow fixup/squash commits
-if echo "$MSG" | grep -qE '^(fixup|squash)! '; then
-  exit 0
-fi
+# Allow merge/squash/fixup commits
+echo "$MSG" | grep -qE '^Merge ' && exit 0
+echo "$MSG" | grep -qE '^\S+.*\(#[0-9]+\)$' && exit 0
+echo "$MSG" | grep -qE '^(fixup|squash)! ' && exit 0
 
 # Check for conventional commit prefix
 if echo "$MSG" | grep -qE '^(feat|fix|refactor|docs|test|chore|style|perf|ci|build|revert|research)(\([a-zA-Z0-9_-]+\))?!?: .+'; then
   exit 0
 fi
 
-# Message doesn't conform — behavior depends on mode
+# Doesn't conform — emit message (warn or strict)
 echo ""
 if [ "$COMMIT_MSG_MODE" = "strict" ]; then
   echo "🛑 Commit message rejected — missing conventional prefix"
@@ -57,21 +44,19 @@ echo "  Your message:  $MSG"
 echo ""
 echo "  Required format: <type>(<scope>): <description>"
 echo ""
-echo "  Types: feat fix refactor docs test chore style perf ci build revert research"
-echo "  Scope: optional — e.g., feat(auth): or fix(api):"
-echo ""
-echo "  Examples:"
-echo "    feat: add user authentication flow"
-echo "    fix(api): prevent crash on empty response"
-echo "    docs: update contributing guide"
-echo ""
+gs_teach "  Types: feat fix refactor docs test chore style perf ci build revert research" \
+         "  Scope: optional — e.g., feat(auth): or fix(api):" \
+         "" \
+         "  Examples:" \
+         "    feat: add user authentication flow" \
+         "    fix(api): prevent crash on empty response" \
+         "    docs: update contributing guide" \
+         ""
 
 if [ "$COMMIT_MSG_MODE" = "strict" ]; then
-  if [ "$TEACH_MODE" = "on" ]; then
-    echo "  Tip: the commit was not created. Re-run with a valid prefix:"
-    echo "    git commit -m \"feat: your description here\""
-    echo ""
-  fi
+  gs_teach "  Tip: the commit was not created. Re-run with a valid prefix:" \
+           "    git commit -m \"feat: your description here\"" \
+           ""
   exit 1
 fi
 

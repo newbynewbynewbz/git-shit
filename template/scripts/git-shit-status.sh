@@ -85,36 +85,40 @@ if [ -f "$GIT_ROOT/.gitshitrc" ]; then
     check_fail ".gitshitrc has syntax errors"
   fi
 
-  # Source the config to check values
+  # Source the config, then apply profile defaults to see what would actually run
   # shellcheck disable=SC1091
   . "$GIT_ROOT/.gitshitrc"
-
-  if [ -n "${COMMIT_MSG_MODE:-}" ]; then
-    check_pass "COMMIT_MSG_MODE=$COMMIT_MSG_MODE"
-  else
-    check_warn "COMMIT_MSG_MODE not set (default: warn)"
+  if [ -f "$GIT_ROOT/scripts/lib/profile.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$GIT_ROOT/scripts/lib/profile.sh"
   fi
 
-  if [ -n "${SECRET_SCAN:-}" ]; then
-    check_pass "SECRET_SCAN=$SECRET_SCAN"
-  else
-    check_warn "SECRET_SCAN not set (default: on)"
-  fi
+  PROFILE_VALUE="${GIT_SHIT_PROFILE:-${PROFILE:-solo}}"
+  case "$PROFILE_VALUE" in
+    solo|team|strict) check_pass "GIT_SHIT_PROFILE=$PROFILE_VALUE" ;;
+    *) check_warn "GIT_SHIT_PROFILE=$PROFILE_VALUE (unknown — falls back to solo)" ;;
+  esac
 
-  if [ -n "${PROTECTED_BRANCHES:-}" ]; then
-    check_pass "PROTECTED_BRANCHES=$PROTECTED_BRANCHES"
-  else
-    check_warn "PROTECTED_BRANCHES not set (default: main)"
-  fi
-
-  if [ -n "${TEACH_MODE:-}" ]; then
-    check_pass "TEACH_MODE=$TEACH_MODE"
-  else
-    check_warn "TEACH_MODE not set (default: on)"
-  fi
+  check_pass "TEACH_MODE=${TEACH_MODE:-off}"
+  check_pass "COMMIT_MSG_MODE=${COMMIT_MSG_MODE:-off}"
+  check_pass "BRANCH_NAMING_MODE=${BRANCH_NAMING_MODE:-off}"
+  check_pass "SECRET_SCAN=${SECRET_SCAN:-on}"
+  check_pass "PROTECTED_BRANCHES=${PROTECTED_BRANCHES:-main}"
+  check_pass "LARGE_COMMIT_THRESHOLD=${LARGE_COMMIT_THRESHOLD:-500}"
 else
   check_fail ".gitshitrc missing"
 fi
+echo ""
+
+# --- Libs (v0.2+) ---
+echo -e "${BOLD}LIBS (scripts/lib/)${RESET}"
+for lib in profile.sh output.sh; do
+  if [ -f "$GIT_ROOT/scripts/lib/$lib" ]; then
+    check_pass "$lib"
+  else
+    check_warn "$lib missing (run: bash install.sh update)"
+  fi
+done
 echo ""
 
 # --- Template Files ---
